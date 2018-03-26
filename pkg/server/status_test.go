@@ -13,6 +13,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -564,6 +565,111 @@ func TestNodeStatusResponse(t *testing.T) {
 			t.Errorf("node status descriptors are not equal\nexpected:%+v\nactual:%+v\n", s.node.Descriptor, nodeStatus.Desc)
 		}
 	}
+}
+
+// TestChartCatalog ensures that all timeseries endpoints
+// are included in the Web UI's Chart Catalog at /#/debug/chart-catalog
+
+// These structs represent the Chart Catalog's structure
+type TimeseriesData struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Location    string `json:"location"`
+}
+
+type IndividualChart struct {
+	Title       string           `json:"title,omitempty"`
+	Data        []TimeseriesData `json:"data"`
+	Downsampler string           `json:"downsampler"`
+	Aggregator  string           `json:"aggregator"`
+	Rate        string           `json:"rate"`
+	Units       string           `json:"units"`
+	AxisLabel   string           `json:"axisLabel"`
+}
+
+type ChartMeta struct {
+	Name           string `json:"name"`
+	LongName       string `json:"longName"`
+	CollectionName string `json:"collectionName"`
+	Level          int    `json:"Level"`
+}
+
+type ChartTimeSeries struct {
+	ChartMeta
+	Timeseries IndividualChart `json:"timeseries"`
+}
+
+type ChartSection struct {
+	ChartMeta
+	Description string            `json:"description,omitempty"`
+	Subsections []ChartSection    `json:"subsections,omitempty"`
+	Charts      []ChartTimeSeries `json:"charts,omitempty"`
+}
+
+func TestChartCatalog(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	s := startServer(t)
+	defer s.Stopper().Stop(context.TODO())
+
+	// First fetch all the node statuses, which contain a list
+	// of all metrics.
+	wrapper := serverpb.NodesResponse{}
+	if err := getStatusJSONProto(s, "nodes", &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	nodeStatuses := wrapper.Nodes
+
+	// Then parse the Chart Catalog JSON into a map
+	chartCatalogFile, err := os.Open("../ui/src/views/reports/containers/charts/catalog.json")
+	if err != nil {
+		t.Errorf("cannot open chart catalog for linting")
+		t.Fatal(err)
+	}
+	defer chartCatalogFile.Close()
+
+	byteVal, _ := ioutil.ReadAll(chartCatalogFile)
+
+	var chartCatalog []ChartSection
+
+	json.Unmarshal(byteVal, &chartCatalog)
+
+	//chartCatalogMap contains all metrics present in the Chart Catalog
+	chartCatalogMap := buildChartCatalogMap(chartCatalog)
+
+	// Ensure that all metrics are included in the Chart Catalog
+	for metric := range nodeStatuses[0].Metrics {
+
+		_, ok := chartCatalogMap[metric]
+		if !ok {
+			t.Errorf(`%s has not yet been added to the chart catalog in 
+				ui/src/view/reports/containers/charts/catalog.json`, metric)
+			t.Fatal("failed TestChartCatalog")
+		}
+	}
+}
+
+// This function is used to generate a map of all metrics contained in
+// ui/src/view/reports/containers/charts/catalog.json
+func buildChartCatalogMap(catalog []ChartSection) map[string]bool {
+
+	var chartCatalogMap = make(map[string]bool)
+
+	for _, section := range catalog {
+
+		childMap := buildChartCatalogMap(section.Subsections)
+
+		for k := range childMap {
+			chartCatalogMap[k] = true
+		}
+
+		for _, chart := range section.Charts {
+			for _, data := range chart.Timeseries.Data {
+				chartCatalogMap[data.Name] = true
+			}
+		}
+	}
+
+	return chartCatalogMap
 }
 
 // TestMetricsRecording verifies that Node statistics are periodically recorded
