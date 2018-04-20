@@ -208,6 +208,41 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 		storeLevel[strconv.Itoa(int(id))] = reg
 	}
 	topLevel["stores"] = storeLevel
+
+	var f interface{}
+	x, err := mr.mu.nodeRegistry.MarshalJSON()
+
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(x, &f)
+
+	if err != nil {
+		return nil, err
+	}
+
+	m := f.(map[string]interface{})
+
+	fmt.Println(m)
+
+	for k, v := range m {
+		switch vv := v.(type) {
+		case string:
+			fmt.Println(k, "is string", vv)
+		case float64:
+			fmt.Println(k, "is float64", vv)
+		case map[string]interface{}:
+			fmt.Println(k, "is an array:")
+			for i, u := range vv {
+				fmt.Println("child of", k, i, u)
+			}
+		default:
+			fmt.Println(k, "is of a type I don't know how to handle")
+			fmt.Println(v)
+		}
+	}
+
 	return json.Marshal(topLevel)
 }
 

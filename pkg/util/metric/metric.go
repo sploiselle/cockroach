@@ -61,6 +61,10 @@ type PrometheusExportable interface {
 	GetName() string
 	// GetHelp is a method on Metadata
 	GetHelp() string
+	// GetUnits is a method on Metadata
+	GetUnits() string
+	// GetAxisLabel is a method on Metadata
+	GetAxisLabel() string
 	// GetType returns the prometheus type enum for this metric.
 	GetType() *prometheusgo.MetricType
 	// GetLabels is a method on Metadata
@@ -75,8 +79,8 @@ type PrometheusExportable interface {
 // Metadata holds metadata about a metric. It must be embedded in
 // each metric object.
 type Metadata struct {
-	Name, Help string
-	labels     []*prometheusgo.LabelPair
+	Name, Help, Units, AxisLabel string
+	labels                       []*prometheusgo.LabelPair
 }
 
 // GetName returns the metric's name.
@@ -87,6 +91,16 @@ func (m *Metadata) GetName() string {
 // GetHelp returns the metric's help string.
 func (m *Metadata) GetHelp() string {
 	return m.Help
+}
+
+// GetName returns the metric's name.
+func (m *Metadata) GetUnits() string {
+	return m.Units
+}
+
+// GetHelp returns the metric's help string.
+func (m *Metadata) GetAxisLabel() string {
+	return m.AxisLabel
 }
 
 // GetLabels returns the metric's labels.

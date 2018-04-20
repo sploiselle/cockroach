@@ -558,9 +558,26 @@ message ReplicaMatrixResponse {
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
+// ChartCatalogRequest requests the Chart Catalog.
+message ChartCatalogRequest {
+}
+
+// ChartCatalogResponse contains a the Chart Catalog.
+message ChartCatalogResponse {
+  repeated string chartCatalog = 1;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
+
+  // URL: /_admin/v1/chartcatalog
+  rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/chartcatalog"
+    };
+  }
+
   // URL: /_admin/v1/users
   rpc Users(UsersRequest) returns (UsersResponse) {
     option (google.api.http) = {

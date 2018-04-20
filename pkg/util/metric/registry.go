@@ -17,6 +17,7 @@ package metric
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"regexp"
 
@@ -125,6 +126,7 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 	m := make(map[string]interface{})
 	for _, metric := range r.tracked {
 		metric.Inspect(func(v interface{}) {
+			fmt.Println("Inspecting", metric.GetName(), v)
 			m[metric.GetName()] = v
 		})
 	}
