@@ -21,6 +21,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+
 	"github.com/VividCortex/ewma"
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
@@ -50,6 +52,12 @@ type Iterable interface {
 	GetName() string
 	// GetHelp returns the help text for the metric.
 	GetHelp() string
+	// GetHelp returns the units for the metric.
+	GetUnits() string
+	// GetAxisLabel returns the axis label for the metric.
+	GetAxisLabel() string
+	// GetMetadata returns all of the Iterable's metadata
+	GetMetadata() tspb.MetricMetadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }
@@ -79,8 +87,8 @@ type PrometheusExportable interface {
 // Metadata holds metadata about a metric. It must be embedded in
 // each metric object.
 type Metadata struct {
-	Name, Help, Units, AxisLabel string
-	labels                       []*prometheusgo.LabelPair
+	Name, Help, Units, AxisLabel, DisplayMethod string
+	labels                                      []*prometheusgo.LabelPair
 }
 
 // GetName returns the metric's name.
@@ -93,12 +101,12 @@ func (m *Metadata) GetHelp() string {
 	return m.Help
 }
 
-// GetName returns the metric's name.
+// GetUnits returns the metric's units.
 func (m *Metadata) GetUnits() string {
 	return m.Units
 }
 
-// GetHelp returns the metric's help string.
+// GetAxisLabel returns the metric's aix labek
 func (m *Metadata) GetAxisLabel() string {
 	return m.AxisLabel
 }
@@ -106,6 +114,17 @@ func (m *Metadata) GetAxisLabel() string {
 // GetLabels returns the metric's labels.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
 	return m.labels
+}
+
+// GetMetadata returns all of the metric's metadata
+func (m *Metadata) GetMetadata() tspb.MetricMetadata {
+	return tspb.MetricMetadata{
+		Name:          m.Name,
+		Help:          m.Help,
+		Units:         m.Units,
+		Axislabel:     m.AxisLabel,
+		DisplayMethod: m.DisplayMethod,
+	}
 }
 
 // AddLabel adds a label/value pair for this metric.
@@ -183,6 +202,7 @@ type Histogram struct {
 // track nonnegative values up to 'maxVal' with 'sigFigs' decimal points of
 // precision.
 func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFigs int) *Histogram {
+	metadata.DisplayMethod = "Histogram"
 	dHist := newSlidingHistogram(duration, maxVal, sigFigs)
 	h := &Histogram{
 		Metadata: metadata,
@@ -201,6 +221,7 @@ func NewHistogram(metadata Metadata, duration time.Duration, maxVal int64, sigFi
 // The windowed portion of the Histogram retains values for approximately
 // histogramWindow.
 func NewLatency(metadata Metadata, histogramWindow time.Duration) *Histogram {
+	metadata.DisplayMethod = "Latency"
 	return NewHistogram(
 		metadata, histogramWindow, MaxLatency.Nanoseconds(), 1,
 	)
@@ -308,6 +329,7 @@ type Counter struct {
 
 // NewCounter creates a counter.
 func NewCounter(metadata Metadata) *Counter {
+	metadata.DisplayMethod = "Counter"
 	return &Counter{metadata, metrics.NewCounter()}
 }
 
@@ -327,7 +349,9 @@ func (c *Counter) GetType() *prometheusgo.MetricType {
 }
 
 // Inspect calls the given closure with the empty string and itself.
-func (c *Counter) Inspect(f func(interface{})) { f(c) }
+func (c *Counter) Inspect(f func(interface{})) {
+	f(c)
+}
 
 // MarshalJSON marshals to JSON.
 func (c *Counter) MarshalJSON() ([]byte, error) {
@@ -350,6 +374,7 @@ type Gauge struct {
 
 // NewGauge creates a Gauge.
 func NewGauge(metadata Metadata) *Gauge {
+	metadata.DisplayMethod = "Gauge"
 	return &Gauge{metadata, new(int64), nil}
 }
 
@@ -358,6 +383,7 @@ func NewGauge(metadata Metadata) *Gauge {
 // Note that Update, Inc, and Dec should NOT be called on a Gauge returned
 // from NewFunctionalGauge.
 func NewFunctionalGauge(metadata Metadata, f func() int64) *Gauge {
+	metadata.DisplayMethod = "Gauge"
 	return &Gauge{metadata, nil, f}
 }
 
@@ -417,6 +443,7 @@ type GaugeFloat64 struct {
 
 // NewGaugeFloat64 creates a GaugeFloat64.
 func NewGaugeFloat64(metadata Metadata) *GaugeFloat64 {
+	metadata.DisplayMethod = "Gauge"
 	return &GaugeFloat64{metadata, metrics.NewGaugeFloat64()}
 }
 

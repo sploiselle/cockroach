@@ -161,7 +161,7 @@ func (mr *MetricsRecorder) AddNode(
 
 	// Create node ID gauge metric with host as a label.
 	metadata := metric.Metadata{
-		Name: "node-id", Units: "Count", AxisLabel: "ID",
+		Name: "node-id",
 		Help: "node ID with labels for advertised RPC and HTTP addresses",
 	}
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
@@ -209,42 +209,39 @@ func (mr *MetricsRecorder) MarshalJSON() ([]byte, error) {
 	}
 	topLevel["stores"] = storeLevel
 
-	// var f map[string]interface{}
-	// x, err := mr.mu.nodeRegistry.MarshalJSON()
+	var f interface{}
+	x, err := mr.mu.nodeRegistry.MarshalJSON()
 
-	// if err != nil {
-	// 	return nil, err
-	// }
+	if err != nil {
+		return nil, err
+	}
 
-	// err = json.Unmarshal(x, &f)
+	err = json.Unmarshal(x, &f)
 
-	// if err != nil {
-	// 	return nil, err
-	// }
+	if err != nil {
+		return nil, err
+	}
 
-	// fmt.Println("recorder.go|f")
-	// fmt.Println(f)
+	m := f.(map[string]interface{})
 
-	// fmt.Println("iterating over m in recorder.go")
+	fmt.Println(m)
 
-	// fmt.Println(f)
-
-	// for k, v := range f {
-	// 	switch vv := v.(type) {
-	// 	case string:
-	// 		fmt.Println(k, "is string", vv)
-	// 	case float64:
-	// 		fmt.Println(k, "is float64", vv)
-	// 	case map[string]interface{}:
-	// 		fmt.Println(k, "is an array:")
-	// 		for i, u := range vv {
-	// 			fmt.Println("child of", k, i, u)
-	// 		}
-	// 	default:
-	// 		fmt.Println(k, "is of a type I don't know how to handle")
-	// 		fmt.Println(v)
-	// 	}
-	// }
+	for k, v := range m {
+		switch vv := v.(type) {
+		case string:
+			fmt.Println(k, "is string", vv)
+		case float64:
+			fmt.Println(k, "is float64", vv)
+		case map[string]interface{}:
+			fmt.Println(k, "is an array:")
+			for i, u := range vv {
+				fmt.Println("child of", k, i, u)
+			}
+		default:
+			fmt.Println(k, "is of a type I don't know how to handle")
+			fmt.Println(v)
+		}
+	}
 
 	return json.Marshal(topLevel)
 }
@@ -323,36 +320,6 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	}
 	mr.mu.lastDataCount = len(data)
 	return data
-}
-
-func (mr *MetricsRecorder) GetMetricsMetadata() map[string]tspb.MetricMetadata {
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
-
-	if mr.mu.nodeRegistry == nil {
-		// We haven't yet processed initialization information; do nothing.
-		if log.V(1) {
-			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
-		}
-		return nil
-	}
-
-	metrics := make(map[string]tspb.MetricMetadata, 0)
-
-	mr.mu.nodeRegistry.GetMetricsMetadata(metrics)
-
-	// Get a random storeID
-	var sID roachpb.StoreID
-
-	for storeID := range mr.mu.storeRegistries {
-		sID = storeID
-		break
-	}
-
-	//Get metric metadata from that store because all stores have the same metadata
-	mr.mu.storeRegistries[sID].GetMetricsMetadata(metrics)
-
-	return metrics
 }
 
 // getNetworkActivity produces three maps detailing information about
@@ -576,20 +543,3 @@ func (rr registryRecorder) record(dest *[]tspb.TimeSeriesData) {
 		})
 	})
 }
-
-// func (rr registryRecorder) aggregate(dest map[string]tspb.MetricMetadata) {
-// 	eachRecordableValue(rr.registry, func(name string, val float64) {
-// 		thisMetadata, err := rr.registry.GetMetricMetadata(name)
-// 		if err != nil {
-// 			fmt.Println(err)
-// 			return
-// 		}
-
-// 		dest[name] = tspb.MetricMetadata{
-// 			Name:      thisMetadata.Name,
-// 			Help:      thisMetadata.Help,
-// 			Units:     thisMetadata.Units,
-// 			Axislabel: thisMetadata.AxisLabel,
-// 		}
-// 	})
-// }

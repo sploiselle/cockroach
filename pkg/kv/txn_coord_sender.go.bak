@@ -162,60 +162,38 @@ type TxnMetrics struct {
 
 var (
 	metaAbortsRates = metric.Metadata{
-		Name:      "txn.aborts",
-		Help:      "Number of aborted KV transactions",
-		Units:     "Count",
-		AxisLabel: "KV Transactions"}
+		Name: "txn.aborts",
+		Help: "Number of aborted KV transactions"}
 	metaCommitsRates = metric.Metadata{
-		Name:      "txn.commits",
-		Help:      "Number of committed KV transactions (including 1PC)",
-		Units:     "Count",
-		AxisLabel: "KV Transactions"}
+		Name: "txn.commits",
+		Help: "Number of committed KV transactions (including 1PC)"}
 	metaCommits1PCRates = metric.Metadata{
-		Name:      "txn.commits1PC",
-		Help:      "Number of committed one-phase KV transactions",
-		Units:     "Count",
-		AxisLabel: "KV Transactions"}
+		Name: "txn.commits1PC",
+		Help: "Number of committed one-phase KV transactions"}
 	metaAutoRetriesRates = metric.Metadata{
-		Name:      "txn.autoretries",
-		Help:      "Number of automatic retries to avoid serializable restarts",
-		Units:     "Count",
-		AxisLabel: "Retries"}
+		Name: "txn.autoretries",
+		Help: "Number of automatic retries to avoid serializable restarts"}
 	metaAbandonsRates = metric.Metadata{
-		Name:      "txn.abandons",
-		Help:      "Number of abandoned KV transactions",
-		Units:     "Count",
-		AxisLabel: "KV Transactions"}
+		Name: "txn.abandons",
+		Help: "Number of abandoned KV transactions"}
 	metaDurationsHistograms = metric.Metadata{
-		Name:      "txn.durations",
-		Help:      "KV transaction durations in nanoseconds",
-		Units:     "Duration",
-		AxisLabel: "Time"}
+		Name: "txn.durations",
+		Help: "KV transaction durations in nanoseconds"}
 	metaRestartsHistogram = metric.Metadata{
-		Name:      "txn.restarts",
-		Help:      "Number of restarted KV transactions",
-		Units:     "Count",
-		AxisLabel: "KV Transactions"}
+		Name: "txn.restarts",
+		Help: "Number of restarted KV transactions"}
 	metaRestartsWriteTooOld = metric.Metadata{
-		Name:      "txn.restarts.writetooold",
-		Help:      "Number of restarts due to a concurrent writer committing first",
-		Units:     "Count",
-		AxisLabel: "Restarted Transactions"}
+		Name: "txn.restarts.writetooold",
+		Help: "Number of restarts due to a concurrent writer committing first"}
 	metaRestartsDeleteRange = metric.Metadata{
-		Name:      "txn.restarts.deleterange",
-		Help:      "Number of restarts due to a forwarded commit timestamp and a DeleteRange command",
-		Units:     "Count",
-		AxisLabel: "Restarted Transactions"}
+		Name: "txn.restarts.deleterange",
+		Help: "Number of restarts due to a forwarded commit timestamp and a DeleteRange command"}
 	metaRestartsSerializable = metric.Metadata{
-		Name:      "txn.restarts.serializable",
-		Help:      "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
-		Units:     "Count",
-		AxisLabel: "Restarted Transactions"}
+		Name: "txn.restarts.serializable",
+		Help: "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE"}
 	metaRestartsPossibleReplay = metric.Metadata{
-		Name:      "txn.restarts.possiblereplay",
-		Help:      "Number of restarts due to possible replays of command batches at the storage layer",
-		Units:     "Count",
-		AxisLabel: "Restarted Transactions"}
+		Name: "txn.restarts.possiblereplay",
+		Help: "Number of restarts due to possible replays of command batches at the storage layer"}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose

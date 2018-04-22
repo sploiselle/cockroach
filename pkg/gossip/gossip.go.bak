@@ -122,40 +122,26 @@ const (
 // Gossip metrics counter names.
 var (
 	MetaConnectionsIncomingGauge = metric.Metadata{
-		Name:      "gossip.connections.incoming",
-		Help:      "Number of active incoming gossip connections",
-		Units:     "Count",
-		AxisLabel: "Connections"}
+		Name: "gossip.connections.incoming",
+		Help: "Number of active incoming gossip connections"}
 	MetaConnectionsOutgoingGauge = metric.Metadata{
-		Name:      "gossip.connections.outgoing",
-		Help:      "Number of active outgoing gossip connections",
-		Units:     "Count",
-		AxisLabel: "Connections"}
+		Name: "gossip.connections.outgoing",
+		Help: "Number of active outgoing gossip connections"}
 	MetaConnectionsRefused = metric.Metadata{
-		Name:      "gossip.connections.refused",
-		Help:      "Number of refused incoming gossip connections",
-		Units:     "Count",
-		AxisLabel: "Connections"}
+		Name: "gossip.connections.refused",
+		Help: "Number of refused incoming gossip connections"}
 	MetaInfosSent = metric.Metadata{
-		Name:      "gossip.infos.sent",
-		Help:      "Number of sent gossip Info objects",
-		Units:     "Count",
-		AxisLabel: "Infos"}
+		Name: "gossip.infos.sent",
+		Help: "Number of sent gossip Info objects"}
 	MetaInfosReceived = metric.Metadata{
-		Name:      "gossip.infos.received",
-		Help:      "Number of received gossip Info objects",
-		Units:     "Count",
-		AxisLabel: "Infos"}
+		Name: "gossip.infos.received",
+		Help: "Number of received gossip Info objects"}
 	MetaBytesSent = metric.Metadata{
-		Name:      "gossip.bytes.sent",
-		Help:      "Number of sent gossip bytes",
-		Units:     "Bytes",
-		AxisLabel: "Size"}
+		Name: "gossip.bytes.sent",
+		Help: "Number of sent gossip bytes"}
 	MetaBytesReceived = metric.Metadata{
-		Name:      "gossip.bytes.received",
-		Help:      "Number of received gossip bytes",
-		Units:     "Bytes",
-		AxisLabel: "Size"}
+		Name: "gossip.bytes.received",
+		Help: "Number of received gossip bytes"}
 )
 
 var (

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -164,54 +165,16 @@ func (s *adminServer) NewContextAndSessionForRPC(
 	return ctx, session
 }
 
-// ChartCatalog is an endpoint that returns a catalog of charts.
-func (s *adminServer) ChartCatalog(
-	ctx context.Context, req *serverpb.ChartCatalogRequest,
-) (*serverpb.ChartCatalogResponse, error) {
+// AllMetricMetadata returns all metric's metadata.
+func (s *adminServer) AllMetricMetadata(
+	ctx context.Context, req *serverpb.MetricMetadataRequest,
+) (*serverpb.MetricMetadataResponse, error) {
 
-	var resp serverpb.ChartCatalogResponse
-
-	timeSeriesData := s.server.recorder.GetTimeSeriesData()
-
-	// var f interface{}
-	// x, err := s.server.recorder.MarshalJSON()
-
-	// if err != nil {
-	// 	return nil, s.serverError(err)
-	// }
-
-	// err = json.Unmarshal(x, &f)
-
-	// if err != nil {
-	// 	return nil, s.serverError(err)
-	// }
-
-	// m := f.(map[string]interface{})
-
-	// fmt.Println(m)
-
-	// for k, v := range m {
-	// 	switch vv := v.(type) {
-	// 	case string:
-	// 		fmt.Println(k, "is string", vv)
-	// 	case float64:
-	// 		fmt.Println(k, "is float64", vv)
-	// 	case map[string]interface{}:
-	// 		fmt.Println(k, "is an array:")
-	// 		for i, u := range vv {
-	// 			fmt.Println("child of", k, i, u)
-	// 		}
-	// 	default:
-	// 		fmt.Println(k, "is of a type I don't know how to handle")
-	// 		fmt.Println(v)
-	// 	}
-	// }
-
-	for _, v := range timeSeriesData {
-		resp.ChartCatalog = append(resp.ChartCatalog, v.Name)
+	resp := &serverpb.MetricMetadataResponse{
+		Metadata: s.server.recorder.GetMetricsMetadata(),
 	}
 
-	return &resp, nil
+	return resp, nil
 }
 
 // Databases is an endpoint that returns a list of databases.

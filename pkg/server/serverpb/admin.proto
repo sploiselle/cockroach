@@ -18,6 +18,7 @@ option go_package = "serverpb";
 
 import "config/zone.proto";
 import "server/diagnosticspb/diagnostics.proto";
+import "ts/tspb/timeseries.proto";
 import "sql/jobs/jobs.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
@@ -558,23 +559,23 @@ message ReplicaMatrixResponse {
   map<int64, ZoneConfig> zone_configs = 2 [(gogoproto.nullable) = false];
 }
 
-// ChartCatalogRequest requests the Chart Catalog.
-message ChartCatalogRequest {
+// MetricMetadataRequest requests metadata for metrics.
+message MetricMetadataRequest {
 }
 
-// ChartCatalogResponse contains a the Chart Catalog.
-message ChartCatalogResponse {
-  repeated string chartCatalog = 1;
+// MetricMetadataResponse contains the metadata for all metics
+message MetricMetadataResponse {
+  map<string, cockroach.ts.tspb.MetricMetadata> metadata = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
 
-  // URL: /_admin/v1/chartcatalog
-  rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
+  // URL: /_admin/v1/metricmetadata
+  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/chartcatalog"
+      get: "/_admin/v1/metricmetadata"
     };
   }
 

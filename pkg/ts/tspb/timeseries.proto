@@ -128,6 +128,16 @@ message TimeSeriesQueryResponse {
   repeated Result results = 1 [(gogoproto.nullable) = false];
 }
 
+// MetricMetadata describes the metadata used to describe the metric
+// from which timeseries data is calculated
+message MetricMetadata {
+  required string name = 1 [(gogoproto.nullable) = false];
+  required string help = 2 [(gogoproto.nullable) = false];
+  required string units = 3 [(gogoproto.nullable) = false];
+  required string axislabel = 4 [(gogoproto.nullable) = false];
+  required string display_method = 5 [(gogoproto.nullable) = false];
+}
+
 // TimeSeries is the gRPC API for the time series server. Through grpc-gateway,
 // we offer REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service TimeSeries {

@@ -33,35 +33,23 @@ var _ metric.Struct = Metrics{}
 
 var (
 	metaBytesQueued = metric.Metadata{
-		Name:      "compactor.suggestionbytes.queued",
-		Help:      "Number of logical bytes in suggested compactions in the queue",
-		Units:     "Bytes",
-		AxisLabel: "Size"}
+		Name: "compactor.suggestionbytes.queued",
+		Help: "Number of logical bytes in suggested compactions in the queue"}
 	metaBytesSkipped = metric.Metadata{
-		Name:      "compactor.suggestionbytes.skipped",
-		Help:      "Number of logical bytes in suggested compactions which were not compacted",
-		Units:     "Bytes",
-		AxisLabel: "Size"}
+		Name: "compactor.suggestionbytes.skipped",
+		Help: "Number of logical bytes in suggested compactions which were not compacted"}
 	metaBytesCompacted = metric.Metadata{
-		Name:      "compactor.suggestionbytes.compacted",
-		Help:      "Number of logical bytes compacted from suggested compactions",
-		Units:     "Bytes",
-		AxisLabel: "Size"}
+		Name: "compactor.suggestionbytes.compacted",
+		Help: "Number of logical bytes compacted from suggested compactions"}
 	metaCompactionSuccesses = metric.Metadata{
-		Name:      "compactor.compactions.success",
-		Help:      "Number of successful compaction requests sent to the storage engine",
-		Units:     "Count",
-		AxisLabel: "Compaction Requests"}
+		Name: "compactor.compactions.success",
+		Help: "Number of successful compaction requests sent to the storage engine"}
 	metaCompactionFailures = metric.Metadata{
-		Name:      "compactor.compactions.failure",
-		Help:      "Number of failed compaction requests sent to the storage engine",
-		Units:     "Count",
-		AxisLabel: "Compaction Requests"}
+		Name: "compactor.compactions.failure",
+		Help: "Number of failed compaction requests sent to the storage engine"}
 	metaCompactingNanos = metric.Metadata{
-		Name:      "compactor.compactingnanos",
-		Help:      "Number of nanoseconds spent compacting ranges",
-		Units:     "Duration",
-		AxisLabel: "Time"}
+		Name: "compactor.compactingnanos",
+		Help: "Number of nanoseconds spent compacting ranges"}
 )
 
 // makeMetrics returns a Metrics struct.

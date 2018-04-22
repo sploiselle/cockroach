@@ -17,10 +17,10 @@ package metric
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"regexp"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/gogo/protobuf/proto"
@@ -73,6 +73,7 @@ func (r *Registry) getLabels() []*prometheusgo.LabelPair {
 func (r *Registry) AddMetric(metric Iterable) {
 	r.Lock()
 	defer r.Unlock()
+	// fmt.Println(metric)
 	r.tracked = append(r.tracked, metric)
 	if log.V(2) {
 		log.Infof(context.TODO(), "Added metric: %s (%T)", metric.GetName(), metric)
@@ -110,6 +111,13 @@ func (r *Registry) AddMetricStruct(metricStruct interface{}) {
 	}
 }
 
+// GetMetricMetadata gets metadata from all tracked metrics
+func (r *Registry) GetMetricsMetadata(dest map[string]tspb.MetricMetadata) {
+	for _, v := range r.tracked {
+		dest[v.GetName()] = v.GetMetadata()
+	}
+}
+
 // Each calls the given closure for all metrics.
 func (r *Registry) Each(f func(name string, val interface{})) {
 	r.Lock()
@@ -126,7 +134,6 @@ func (r *Registry) MarshalJSON() ([]byte, error) {
 	m := make(map[string]interface{})
 	for _, metric := range r.tracked {
 		metric.Inspect(func(v interface{}) {
-			fmt.Println("Inspecting", metric.GetName(), v)
 			m[metric.GetName()] = v
 		})
 	}
