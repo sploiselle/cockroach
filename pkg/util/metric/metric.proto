@@ -47,6 +47,10 @@ enum DisplayUnit {
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
 message Metadata {
+<<<<<<< HEAD
+=======
+
+>>>>>>> server: Add /_admin/ endpoint to get all metric's metadata
   required string name = 1 [(gogoproto.nullable) = false];
   required string help = 2 [(gogoproto.nullable) = false];
   required string unit = 3 [(gogoproto.nullable) = false];
