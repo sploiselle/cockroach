@@ -1008,6 +1008,8 @@ func (*MetricMetadataRequest) Descriptor() ([]byte, []int) { return fileDescript
 
 // MetricMetadataResponse contains the metadata for all metics.
 type MetricMetadataResponse struct {
+	// cockroach.util.metric.Metadata.Labels does not support any of the
+	// following gogoprotobuf extensions that we enable by default, so turn them off.
 	DisplayUnitKey map[int32]string                          `protobuf:"bytes,1,rep,name=displayUnitKey" json:"displayUnitKey" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	MetricTypeKey  map[int32]string                          `protobuf:"bytes,2,rep,name=metricTypeKey" json:"metricTypeKey" protobuf_key:"varint,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	Metadata       map[string]cockroach_util_metric.Metadata `protobuf:"bytes,3,rep,name=metadata" json:"metadata" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value"`

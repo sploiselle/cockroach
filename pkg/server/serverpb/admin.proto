@@ -557,7 +557,6 @@ message MetricMetadataRequest {
 message MetricMetadataResponse {
   // cockroach.util.metric.Metadata.Labels does not support any of the 
   // following gogoprotobuf extensions that we enable by default, so turn them off.
-  
   map<int32, string> displayUnitKey = 1 [(gogoproto.nullable) = false];
   map<int32, string> metricTypeKey = 2 [(gogoproto.nullable) = false];
   map<string, cockroach.util.metric.Metadata> metadata = 3 [(gogoproto.nullable) = false];
