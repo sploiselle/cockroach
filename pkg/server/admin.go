@@ -149,6 +149,18 @@ func (s *adminServer) isNotFoundError(err error) bool {
 	return err != nil && strings.HasSuffix(err.Error(), "does not exist")
 }
 
+// AllMetricMetadata returns all metric's metadata.
+func (s *adminServer) AllMetricMetadata(
+	ctx context.Context, req *serverpb.MetricMetadataRequest,
+) (*serverpb.MetricMetadataResponse, error) {
+
+	resp := &serverpb.MetricMetadataResponse{
+		Metadata: s.server.recorder.GetMetricsMetadata(),
+	}
+
+	return resp, nil
+}
+
 // Databases is an endpoint that returns a list of databases.
 func (s *adminServer) Databases(
 	ctx context.Context, req *serverpb.DatabasesRequest,
@@ -1112,7 +1124,7 @@ func (s *adminServer) Jobs(
              created, started, finished, modified, fraction_completed, error
         FROM crdb_internal.jobs
        WHERE true
-	`)
+  `)
 	if req.Status != "" {
 		q.Append(" AND status = $", req.Status)
 	}

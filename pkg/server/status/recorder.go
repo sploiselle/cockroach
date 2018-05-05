@@ -173,10 +173,15 @@ func (mr *MetricsRecorder) AddNode(
 
 	// Create node ID gauge metric with host as a label.
 	metadata := metric.Metadata{
+<<<<<<< HEAD
 		Name:      "node-id",
 		Help:      "node ID with labels for advertised RPC and HTTP addresses",
 		Units:     metric.UnitsCount,
 		AxisLabel: "ID",
+=======
+		Name: "node-id", Units: metric.UnitsCount, AxisLabel: "ID",
+		Help: "node ID with labels for advertised RPC and HTTP addresses",
+>>>>>>> 410e59b53... server: Expose metric metadata through /_admin endpoint
 	}
 	metadata.AddLabel(advertiseAddrLabelKey, advertiseAddr)
 	metadata.AddLabel(httpAddrLabelKey, httpAddr)
@@ -302,6 +307,36 @@ func (mr *MetricsRecorder) GetTimeSeriesData() []tspb.TimeSeriesData {
 	}
 	atomic.CompareAndSwapInt64(&mr.lastDataCount, lastDataCount, int64(len(data)))
 	return data
+}
+
+func (mr *MetricsRecorder) GetMetricsMetadata() map[string]tspb.MetricMetadata {
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	if mr.mu.nodeRegistry == nil {
+		// We haven't yet processed initialization information; do nothing.
+		if log.V(1) {
+			log.Warning(context.TODO(), "MetricsRecorder.GetMetricsMetadata() called before NodeID allocation")
+		}
+		return nil
+	}
+
+	metrics := make(map[string]tspb.MetricMetadata, 0)
+
+	mr.mu.nodeRegistry.GetMetricsMetadata(metrics)
+
+	// Get a random storeID
+	var sID roachpb.StoreID
+
+	for storeID := range mr.mu.storeRegistries {
+		sID = storeID
+		break
+	}
+
+	//Get metric metadata from that store because all stores have the same metadata
+	mr.mu.storeRegistries[sID].GetMetricsMetadata(metrics)
+
+	return metrics
 }
 
 // getNetworkActivity produces three maps detailing information about

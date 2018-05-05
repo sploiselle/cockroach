@@ -215,11 +215,19 @@ func TestMetricsRecorder(t *testing.T) {
 
 		// Stats needed for store summaries.
 		{"ranges", "counter", 1},
+<<<<<<< HEAD
 		{"replicas.leaders", "gauge", 1},
 		{"replicas.leaseholders", "gauge", 1},
 		{"ranges", "gauge", 1},
 		{"ranges.unavailable", "gauge", 1},
 		{"ranges.underreplicated", "gauge", 1},
+=======
+-		{"replicas.leaders", "gauge", 1},
+-		{"replicas.leaseholders", "gauge", 1},
+-		{"ranges", "gauge", 1},
+-		{"ranges.unavailable", "gauge", 1},
+-		{"ranges.underreplicated", "gauge", 1},
+>>>>>>> 410e59b53... server: Expose metric metadata through /_admin endpoint
 	}
 
 	// Add the metrics to each registry and set their values. At the same time,

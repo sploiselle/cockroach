@@ -88,7 +88,7 @@ type PrometheusExportable interface {
 // each metric object.
 type Metadata struct {
 	Name, Help, AxisLabel, MetricType string
-	Units                             tspb.MetricAxisUnits
+	Units                             tspb.MetricAxisUnits // Zero value is Counts
 	labels                            []*prometheusgo.LabelPair
 }
 
