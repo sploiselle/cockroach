@@ -1,0 +1,62 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+syntax = "proto3";
+package cockroach.server.catalog;
+option go_package = "catalog";
+
+import "gogoproto/gogo.proto";
+
+// AxisUnits describes the Unit options available in the Admin UI
+enum AxisUnits {
+  Unset = 0;
+  Count = 1;
+  Bytes = 2;
+  Duration = 3;
+}
+
+// ChartMetric converts cockroach.util.metric.Metadata
+// into a struct that's useful for generating Admin UI charts
+message ChartMetric {
+  string name = 1;
+  string help = 2;
+  string axisLabel = 3;
+  AxisUnits preferredUnits = 4;
+}
+
+// IndividualChart describes both the properties necessary to display
+// AdminUI charts, as well as a key to find them (collectionname)
+message IndividualChart {
+  string title = 1;
+  string longname = 2;
+  string collectionname = 3;
+	string downsampler = 4;
+	string aggregator = 5;
+	string derivative = 6;
+	AxisUnits units = 7;
+  string axisLabel = 8;
+  bool percentiles = 9;
+	repeated ChartMetric data = 10;
+}
+
+// ChartSection describes levels of organization for catalog charts
+message ChartSection {
+	string name = 1;
+	string longname = 2;
+  string collectionname = 3;
+  string description = 4;
+	int32 level = 5;
+	repeated ChartSection subsections = 6;
+	repeated IndividualChart charts = 7;
+}
