@@ -842,9 +842,15 @@ var (
 		Name:        "queue.gc.info.abortspanconsidered",
 		Help:        "Number of AbortSpan entries old enough to be considered for removal",
 <<<<<<< HEAD
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
 =======
 		Unit:        "Txns",
+=======
+		Unit:        "Txns",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 >>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
