@@ -98,12 +98,6 @@ func (x *Unit) UnmarshalJSON(data []byte) error {
 }
 func (Unit) EnumDescriptor() ([]byte, []int) { return fileDescriptorMetric, []int{0} }
 
-// metric.LabelPair is a proxy for io.prometheus.client.LabelPair.
-// io.prometheus.client.LabelPair doesn't support gogoproto.marshaler
-// and gogoproto.unmarshaler which are required by gRPC. metric.LabelPair
-// stores information that is similarly structured, supports the requisite
-// gogoproto options, and is convertible to io.prometheus.client.LabelPair
-// to satisfy PrometheusExportable's GetLabels method.
 type LabelPair struct {
 	Name  *string `protobuf:"bytes,1,opt,name=name" json:"name,omitempty"`
 	Value *string `protobuf:"bytes,2,opt,name=value" json:"value,omitempty"`

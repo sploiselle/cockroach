@@ -100,15 +100,17 @@ func (m *Metadata) GetUnit() Unit {
 	return m.Unit
 }
 
-// GetLabels returns the metric's labels. For rationale behind the conversion
-// from metric.LabelPair to prometheusgo.LabelPair, see the LabelPair comment
-// in pkg/util/metric/metric.proto.
+// GetLabels returns the metric's labels.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	lps := make([]*prometheusgo.LabelPair, len(m.Labels))
-	// x satisfies the field XXX_unrecognized in prometheusgo.LabelPair.
+	lps := make([]*prometheusgo.LabelPair, 0)
 	var x []byte
+<<<<<<< HEAD
 	for i, v := range m.Labels {
 		lps[i] = &prometheusgo.LabelPair{Name: v.Name, Value: v.Value, XXX_unrecognized: x}
+=======
+	for _, v := range m.Labels {
+		lps = append(lps, &prometheusgo.LabelPair{v.Name, v.Value, x})
+>>>>>>> c1fc73b00... admin: Add Chart Catalog endpoint
 	}
 	return lps
 }

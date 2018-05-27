@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/catalog"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -156,6 +157,21 @@ func (s *adminServer) AllMetricMetadata(
 
 	resp := &serverpb.MetricMetadataResponse{
 		Metadata: s.server.recorder.GetMetricsMetadata(),
+	}
+
+	return resp, nil
+}
+
+// AllMetricMetadata returns all metric's metadata.
+func (s *adminServer) ChartCatalog(
+	ctx context.Context, req *serverpb.ChartCatalogRequest,
+) (*serverpb.ChartCatalogResponse, error) {
+
+	timeSeriesMetaData := s.server.recorder.GetMetricsMetadata()
+
+	resp := &serverpb.ChartCatalogResponse{
+		UnitsKey: catalog.AxisUnits_name,
+		Catalog:  catalog.GenerateCatalog(timeSeriesMetaData),
 	}
 
 	return resp, nil
