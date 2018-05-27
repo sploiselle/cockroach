@@ -791,43 +791,71 @@ var (
 	metaGCTransactionSpanScanned = metric.Metadata{
 		Name:        "queue.gc.info.transactionspanscanned",
 		Help:        "Number of entries in transaction spans scanned from the engine",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCTransactionSpanGCAborted = metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcaborted",
 		Help:        "Number of GC'able entries corresponding to aborted txns",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCTransactionSpanGCCommitted = metric.Metadata{
 		Name:        "queue.gc.info.transactionspangccommitted",
 		Help:        "Number of GC'able entries corresponding to committed txns",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCTransactionSpanGCPending = metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcpending",
 		Help:        "Number of GC'able entries corresponding to pending txns",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCAbortSpanScanned = metric.Metadata{
 		Name:        "queue.gc.info.abortspanscanned",
 		Help:        "Number of transactions present in the AbortSpan scanned from the engine",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Txns",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCAbortSpanConsidered = metric.Metadata{
 		Name:        "queue.gc.info.abortspanconsidered",
 		Help:        "Number of AbortSpan entries old enough to be considered for removal",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Txns",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCAbortSpanGCNum = metric.Metadata{
 		Name:        "queue.gc.info.abortspangcnum",
 		Help:        "Number of AbortSpan entries fit for removal",
+<<<<<<< HEAD
 		Unit:        "Txn Entries",
+=======
+		Unit:        "Entries",
+>>>>>>> *: Add Units and AxisLabel to metric.Metadata
 		DisplayUnit: metric.DisplayUnit_Count,
 	}
 	metaGCPushTxn = metric.Metadata{
