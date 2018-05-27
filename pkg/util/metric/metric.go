@@ -52,24 +52,11 @@ type Iterable interface {
 	GetHelp() string
 	// GetUnit returns the unit that the metric measures.
 	GetUnit() string
-<<<<<<< HEAD
-<<<<<<< HEAD
 	// GetDisplayUnit returns the unit that should be used to display the metric
 	// (e.g. in bytes).
 	GetDisplayUnit() DisplayUnit
 	// GetMetadata returns the metric's metadata, which can be used in charts.
 	GetMetadata() Metadata
-=======
-	// GetDisplayUnit returns how the metric should be displayed (e.g. in bytes).
-	GetDisplayUnit() DisplayUnit
->>>>>>> *: Add Units and AxisLabel to metric.Metadata
-=======
-	// GetDisplayUnit returns the unit that should be used to display the metric
-	// (e.g. in bytes).
-	GetDisplayUnit() DisplayUnit
-	// GetMetadata returns the metric's metadata, which can be used in charts.
-	GetMetadata() Metadata
->>>>>>> server: Add /_admin/ endpoint to get all metric's metadata
 	// Inspect calls the given closure with each contained item.
 	Inspect(func(interface{}))
 }

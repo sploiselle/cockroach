@@ -18,6 +18,7 @@ option go_package = "serverpb";
 
 import "config/zone.proto";
 import "sql/jobs/jobs.proto";
+import "server/catalog/catalog.proto";
 import "storage/engine/enginepb/mvcc.proto";
 import "storage/liveness.proto";
 import "storage/log.proto";
@@ -555,16 +556,31 @@ message MetricMetadataRequest {
 
 // MetricMetadataResponse contains the metadata for all metics.
 message MetricMetadataResponse {
-  // cockroach.util.metric.Metadata.Labels does not support any of the 
-  // following gogoprotobuf extensions that we enable by default, so turn them off.
   map<int32, string> displayUnitKey = 1 [(gogoproto.nullable) = false];
   map<int32, string> metricTypeKey = 2 [(gogoproto.nullable) = false];
   map<string, cockroach.util.metric.Metadata> metadata = 3 [(gogoproto.nullable) = false];
 }
 
+// ChartCatalogRequest requests a catalog of available charts metadata for metrics.
+message ChartCatalogRequest {
+}
+
+// ChartCatalogRequest requests a catalog of available charts metadata for metrics.
+message ChartCatalogResponse {
+  map<int32, string> unitsKey = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.server.catalog.ChartSection catalog = 2;
+}
+
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
+
+  // URL: /_admin/v1/chartcatalog
+  rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/chartcatalog"
+    };
+  }
 
   // URL: /_admin/v1/users
   rpc Users(UsersRequest) returns (UsersResponse) {
