@@ -1163,6 +1163,7 @@ var metadataUnitsToAxisUnits = map[metric.DisplayUnit]AxisUnits{
 
 func GenerateCatalog(metadata map[string]metric.Metadata) []*ChartSection {
 
+	// Use an array instead of a map because order is important
 	catalog := make([]*ChartSection, 7)
 
 	catalogKey := map[string]int{
@@ -1250,166 +1251,282 @@ func GenerateCatalog(metadata map[string]metric.Metadata) []*ChartSection {
 	// Range over all described charts
 	for _, v := range charts {
 
-		// Range over each level of organization
+		// Range over each level of organization.
 		for _, orgLevel := range v.Organization {
 
-			thisChart := IndividualChart{
-				Title: v.Name,
-				// Longname:       thisLongName,
-				// Collectionname: thisCollectionName,
-				// Downsampler:    v.Downsampler,
-				// Aggregator:     v.Aggregator,
-				// Derivative:     v.Rate,
-				// Units:          v.Units,
-				// AxisLabel:      v.AxisLabel,
-				// Percentiles:    v.Percentiles,
-				// Data:           chartMetrics,
-			}
-
-			// Populate Collectionname and Longname using organization
-			numberOfLevels := len(orgLevel)
-			collectionNameSlugs := make([]string, numberOfLevels)
-			makeDashes := regexp.MustCompile("( )|/|,")
-			for k, n := range orgLevel {
-				collectionNameSlugs[k] = makeDashes.ReplaceAllString(strings.ToLower(n), "-")
-				thisChart.Collectionname = thisChart.Collectionname + collectionNameSlugs[k] + "-"
-				thisChart.Longname = thisChart.Longname + n + " | "
-			}
-			thisChart.Collectionname += makeDashes.ReplaceAllString(strings.ToLower(v.Name), "-")
-			thisChart.Longname += v.Name
-
-			w, ok := catalogKey[orgLevel[0]]
+			// Make sure the chart is in the catalog
+			ck, ok := catalogKey[orgLevel[0]]
 
 			if !ok {
 				log.Fatal("Trying to put something where it can't exist")
 			}
 
-			var chartMetrics []*ChartMetric
-
-			for _, x := range v.Metrics {
-
-				md, ok := metadata[x]
-
-				// If metric is missing from metadata, don't add it to this chart
-				// because we won't be able to calculate it
-				if !ok {
-					fmt.Printf("Trying to use metric %v, but it doesn't exist\n", x)
-				}
-
-				var thisMetric = &ChartMetric{
-					Name:           md.Name,
-					Help:           md.Help,
-					AxisLabel:      md.Unit,
-					PreferredUnits: metadataUnitsToAxisUnits[md.DisplayUnit],
-				}
-
-				chartMetrics = append(chartMetrics, thisMetric)
-
-				if chartMetrics[0].PreferredUnits != thisMetric.PreferredUnits {
-					fmt.Printf("Charts should have the same units: %v has %v; %v has %v\n", chartMetrics[0].Name, chartMetrics[0].PreferredUnits, thisMetric.Name, thisMetric.PreferredUnits)
-				}
-				if chartMetrics[0].AxisLabel != thisMetric.AxisLabel {
-					fmt.Printf("Charts must have the same axislabel: %v has %v; %v has %v\n", chartMetrics[0].Name, chartMetrics[0].AxisLabel, thisMetric.Name, thisMetric.AxisLabel)
-				}
-			}
-
 			// If the chart has no metrics, don't add it
-			if len(chartMetrics) == 0 {
+			if len(v.Metrics) == 0 {
 				continue
 			}
 
-			// Get this chart's metrics' Prometheus type; because prometheusgo.MetricType is
-			// a proto2 it cannot be directly imported into catalog.ChartMetric,
-			// this lookup grabs it from metric.Metadata where it is imported
+			thisChart := IndividualChart{
+				Title: v.Name,
+			}
+
+			// Store converted name to use later to populate chart sections
+			collectionNameSlugs := make([]string, len(orgLevel))
+
+			generateNames(v, &thisChart, orgLevel, collectionNameSlugs)
+
+			// // Collectionnames use dashes instead of spaces and slashes.
+			// makeDashes := regexp.MustCompile("( )|/|,")
+
+			// for k, n := range orgLevel {
+			// 	collectionNameSlugs[k] = makeDashes.ReplaceAllString(strings.ToLower(n), "-")
+			// 	// Collectionnames look like "sql-layer-sql-connections".
+			// 	thisChart.Collectionname = thisChart.Collectionname + collectionNameSlugs[k] + "-"
+			// 	// Longnames end up looking like "SQL Layer | SQL | Connections".
+			// 	thisChart.Longname = thisChart.Longname + n + " | "
+			// }
+			// thisChart.Collectionname += makeDashes.ReplaceAllString(strings.ToLower(v.Name), "-")
+			// thisChart.Longname += v.Name
+
+			var chartMetrics []*ChartMetric
+
+			populateChartMetrics(metadata, &chartMetrics, v.Metrics)
+
+			thisChart.Data = chartMetrics
+			// for _, x := range v.Metrics {
+
+			// 	md, ok := metadata[x]
+
+			// 	// If metric is missing from metadata, don't add it to this chart
+			// 	// because we won't be able to calculate it
+			// 	if !ok {
+			// 		fmt.Printf("Trying to use metric %v, but it doesn't exist\n", x)
+			// 	}
+
+			// 	var thisMetric = &ChartMetric{
+			// 		Name:           md.Name,
+			// 		Help:           md.Help,
+			// 		AxisLabel:      md.Unit,
+			// 		PreferredUnits: metadataUnitsToAxisUnits[md.DisplayUnit],
+			// 	}
+
+			// 	chartMetrics = append(chartMetrics, thisMetric)
+
+			// 	if chartMetrics[0].PreferredUnits != thisMetric.PreferredUnits {
+			// 		fmt.Printf("Charts should have the same units: %v has %v; %v has %v\n", chartMetrics[0].Name, chartMetrics[0].PreferredUnits, thisMetric.Name, thisMetric.PreferredUnits)
+			// 	}
+			// 	if chartMetrics[0].AxisLabel != thisMetric.AxisLabel {
+			// 		fmt.Printf("Charts must have the same axislabel: %v has %v; %v has %v\n", chartMetrics[0].Name, chartMetrics[0].AxisLabel, thisMetric.Name, thisMetric.AxisLabel)
+			// 	}
+			// }
+
 			metricType := metadata[v.Metrics[0]].MetricType
 
 			thisChartDefaults := defaultsByDisplayMethod[metricType]
 
+			populateChartDisplayProperties(v, chartMetrics[0], &thisChart, thisChartDefaults)
+
+			// Get this chart's metrics' Prometheus type; because prometheusgo.MetricType is
+			// a proto2 it cannot be directly imported into catalog.ChartMetric,
+			// this lookup grabs it from metric.Metadata where it is imported
+
 			// Set all zero values to the metric type's default
-			if v.Downsampler == "" {
-				v.Downsampler = thisChartDefaults.Downsampler
-			}
-			if v.Aggregator == "" {
-				v.Aggregator = thisChartDefaults.Aggregator
-			}
-			if v.Rate == "" {
-				v.Rate = thisChartDefaults.Rate
-			}
-			if v.Percentiles == false {
-				v.Percentiles = thisChartDefaults.Percentiles
-			}
+			// if v.Downsampler == "" {
+			// 	v.Downsampler = thisChartDefaults.Downsampler
+			// }
+			// if v.Aggregator == "" {
+			// 	v.Aggregator = thisChartDefaults.Aggregator
+			// }
+			// if v.Rate == "" {
+			// 	v.Rate = thisChartDefaults.Rate
+			// }
+			// if v.Percentiles == false {
+			// 	v.Percentiles = thisChartDefaults.Percentiles
+			// }
 
-			// Set unspecified AxisUnits to the first metric's value
-			if v.Units == AxisUnits_Unset {
-				v.Units = chartMetrics[0].PreferredUnits
-			}
+			// // Set unspecified AxisUnits to the first metric's value
+			// if v.Units == AxisUnits_Unset {
+			// 	v.Units = chartMetrics[0].PreferredUnits
+			// }
 
-			// Set unspecified AxisLabels to the first metric's value
-			if v.AxisLabel == "" {
-				v.AxisLabel = chartMetrics[0].AxisLabel
-			}
+			// // Set unspecified AxisLabels to the first metric's value
+			// if v.AxisLabel == "" {
+			// 	v.AxisLabel = chartMetrics[0].AxisLabel
+			// }
 
-			// Populate rest of thisChart
-			thisChart.Downsampler = v.Downsampler
-			thisChart.Aggregator = v.Aggregator
-			thisChart.Derivative = v.Rate
-			thisChart.Percentiles = v.Percentiles
-			thisChart.Units = v.Units
-			thisChart.AxisLabel = v.AxisLabel
-			thisChart.Data = chartMetrics
+			// // Populate rest of thisChart
+			// thisChart.Downsampler = v.Downsampler
+			// thisChart.Aggregator = v.Aggregator
+			// thisChart.Derivative = v.Rate
+			// thisChart.Percentiles = v.Percentiles
+			// thisChart.Units = v.Units
+			// thisChart.AxisLabel = v.AxisLabel
 
-			var found bool
-			var level1 *ChartSection
+			generateChartSections(catalog[ck], orgLevel, collectionNameSlugs, 1, &thisChart)
 
-			for _, x := range catalog[w].Subsections {
-				if x.Name == orgLevel[1] {
-					found = true
-					level1 = x
-					break
-				}
-			}
+			// var found bool
+			// var level1 *ChartSection
 
-			if !found {
-				level1 = &ChartSection{
-					Name:           orgLevel[1],
-					Longname:       "All " + orgLevel[1],
-					Collectionname: collectionNameSlugs[0] + "-" + collectionNameSlugs[1],
-					Level:          1,
-				}
+			// for _, x := range catalog[ck].Subsections {
+			// 	if x.Name == orgLevel[1] {
+			// 		found = true
+			// 		level1 = x
+			// 		break
+			// 	}
+			// }
 
-				catalog[w].Subsections = append(catalog[w].Subsections, level1)
-			}
+			// if !found {
+			// 	level1 = &ChartSection{
+			// 		Name:           orgLevel[1],
+			// 		Longname:       "All " + orgLevel[1],
+			// 		Collectionname: collectionNameSlugs[0] + "-" + collectionNameSlugs[1],
+			// 		Level:          1,
+			// 	}
 
-			found = false
+			// 	catalog[ck].Subsections = append(catalog[ck].Subsections, level1)
+			// }
 
-			if numberOfLevels > 2 {
+			// found = false
 
-				var level2 *ChartSection
+			// if numberOfLevels > 2 {
 
-				for _, x := range level1.Subsections {
-					if x.Name == orgLevel[2] {
-						found = true
-						level2 = x
-					}
-				}
+			// 	var level2 *ChartSection
 
-				if !found {
-					level2 = &ChartSection{
-						Name:           orgLevel[2],
-						Longname:       "All " + orgLevel[1] + " " + orgLevel[2],
-						Collectionname: taxonomySlugs[0] + "-" + taxonomySlugs[1] + taxonomySlugs[2],
-						Level:          2,
-					}
+			// 	for _, x := range level1.Subsections {
+			// 		if x.Name == orgLevel[2] {
+			// 			found = true
+			// 			level2 = x
+			// 		}
+			// 	}
 
-					level1.Subsections = append(level1.Subsections, level2)
-				}
+			// 	if !found {
+			// 		level2 = &ChartSection{
+			// 			Name:           orgLevel[2],
+			// 			Longname:       "All " + orgLevel[1] + " " + orgLevel[2],
+			// 			Collectionname: collectionNameSlugs[0] + "-" + collectionNameSlugs[1] + collectionNameSlugs[2],
+			// 			Level:          2,
+			// 		}
 
-				level2.Charts = append(level2.Charts, &thisChart)
-			} else {
-				level1.Charts = append(level1.Charts, &thisChart)
-			}
+			// 		level1.Subsections = append(level1.Subsections, level2)
+			// 	}
+
+			// 	level2.Charts = append(level2.Charts, &thisChart)
+			// } else {
+			// 	level1.Charts = append(level1.Charts, &thisChart)
+			// }
 		}
 	}
 
 	return catalog
+}
+
+func generateNames(cd ChartDescription, thisChart *IndividualChart, orgLevel []string, collectionNameSlugs []string) {
+
+	// Collectionnames use dashes instead of spaces and slashes.
+	makeDashes := regexp.MustCompile("( )|/|,")
+
+	for k, n := range orgLevel {
+		collectionNameSlugs[k] = makeDashes.ReplaceAllString(strings.ToLower(n), "-")
+		// Collectionnames look like "sql-layer-sql-connections".
+		thisChart.Collectionname = thisChart.Collectionname + collectionNameSlugs[k] + "-"
+		// Longnames end up looking like "SQL Layer | SQL | Connections".
+		thisChart.Longname = thisChart.Longname + n + " | "
+	}
+	thisChart.Collectionname += makeDashes.ReplaceAllString(strings.ToLower(cd.Name), "-")
+	thisChart.Longname += cd.Name
+}
+
+func populateChartMetrics(metadata map[string]metric.Metadata, chartMetrics *[]*ChartMetric, metricNames []string) {
+	for _, x := range metricNames {
+
+		md, ok := metadata[x]
+
+		// If metric is missing from metadata, don't add it to this chart
+		// because we won't be able to calculate it
+		if !ok {
+			fmt.Printf("Trying to use metric %v, but it doesn't exist\n", x)
+		}
+
+		var thisMetric = &ChartMetric{
+			Name:           md.Name,
+			Help:           md.Help,
+			AxisLabel:      md.Unit,
+			PreferredUnits: metadataUnitsToAxisUnits[md.DisplayUnit],
+		}
+
+		*chartMetrics = append(*chartMetrics, thisMetric)
+
+	}
+}
+
+func populateChartDisplayProperties(cd ChartDescription, cm *ChartMetric, thisChart *IndividualChart, d chartDefaults) {
+
+	// Set all zero values to the metric type's default
+	if cd.Downsampler == "" {
+		cd.Downsampler = d.Downsampler
+	}
+	if cd.Aggregator == "" {
+		cd.Aggregator = d.Aggregator
+	}
+	if cd.Rate == "" {
+		cd.Rate = d.Rate
+	}
+	if cd.Percentiles == false {
+		cd.Percentiles = d.Percentiles
+	}
+
+	// Set unspecified AxisUnits to the first metric's value
+	if cd.Units == AxisUnits_Unset {
+		cd.Units = cm.PreferredUnits
+	}
+
+	// Set unspecified AxisLabels to the first metric's value
+	if cd.AxisLabel == "" {
+		cd.AxisLabel = cm.AxisLabel
+	}
+
+	// Populate rest of thisChart
+	thisChart.Downsampler = cd.Downsampler
+	thisChart.Aggregator = cd.Aggregator
+	thisChart.Derivative = cd.Rate
+	thisChart.Percentiles = cd.Percentiles
+	thisChart.Units = cd.Units
+	thisChart.AxisLabel = cd.AxisLabel
+}
+
+func generateChartSections(parent *ChartSection, orgLevel []string, collectionNameSlugs []string, level int, c *IndividualChart) {
+	var cs *ChartSection
+
+	var found bool
+
+	for _, x := range parent.Subsections {
+		if x.Name == orgLevel[level] {
+			found = true
+			cs = x
+			break
+		}
+	}
+
+	if !found {
+		cs = &ChartSection{
+			Name:           orgLevel[level],
+			Longname:       "All",
+			Collectionname: collectionNameSlugs[0],
+			Level:          int32(level),
+		}
+
+		for i := 1; i <= level; i++ {
+			cs.Longname = cs.Longname + " " + orgLevel[i]
+			cs.Collectionname = cs.Collectionname + "-" + collectionNameSlugs[i]
+		}
+
+		parent.Subsections = append(parent.Subsections, cs)
+	}
+
+	if level == (len(orgLevel) - 1) {
+		cs.Charts = append(cs.Charts, c)
+	} else {
+		level++
+		generateChartSections(cs, orgLevel, collectionNameSlugs, level, c)
+	}
 }
