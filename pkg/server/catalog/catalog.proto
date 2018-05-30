@@ -18,6 +18,7 @@ option go_package = "catalog";
 
 import "gogoproto/gogo.proto";
 
+// AxisUnits describes the Unit options available in the Admin UI
 enum AxisUnits {
   Unset = 0;
   Count = 1;
@@ -25,6 +26,8 @@ enum AxisUnits {
   Duration = 3;
 }
 
+// ChartMetric converts cockroach.util.metric.Metadata
+// into a struct that's useful for generating Admin UI charts
 message ChartMetric {
   string name = 1;
   string help = 2;
@@ -32,6 +35,8 @@ message ChartMetric {
   AxisUnits preferredUnits = 4;
 }
 
+// IndividualChart describes both the properties necessary to display
+// AdminUI charts, as well as a key to find them (collectionname)
 message IndividualChart {
   string title = 1;
   string longname = 2;
@@ -45,6 +50,7 @@ message IndividualChart {
 	repeated ChartMetric data = 10;
 }
 
+// ChartSection describes levels of organization for catalog charts
 message ChartSection {
 	string name = 1;
 	string longname = 2;

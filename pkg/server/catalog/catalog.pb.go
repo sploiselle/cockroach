@@ -31,6 +31,7 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// AxisUnits describes the Unit options available in the Admin UI
 type AxisUnits int32
 
 const (
@@ -58,6 +59,8 @@ func (x AxisUnits) String() string {
 }
 func (AxisUnits) EnumDescriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{0} }
 
+// ChartMetric converts cockroach.util.metric.Metadata
+// into a struct that's useful for generating Admin UI charts
 type ChartMetric struct {
 	Name           string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Help           string    `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
@@ -70,6 +73,8 @@ func (m *ChartMetric) String() string            { return proto.CompactTextStrin
 func (*ChartMetric) ProtoMessage()               {}
 func (*ChartMetric) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{0} }
 
+// IndividualChart describes both the properties necessary to display
+// AdminUI charts, as well as a key to find them (collectionname)
 type IndividualChart struct {
 	Title          string         `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
 	Longname       string         `protobuf:"bytes,2,opt,name=longname,proto3" json:"longname,omitempty"`
@@ -88,6 +93,7 @@ func (m *IndividualChart) String() string            { return proto.CompactTextS
 func (*IndividualChart) ProtoMessage()               {}
 func (*IndividualChart) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{1} }
 
+// ChartSection describes levels of organization for catalog charts
 type ChartSection struct {
 	Name           string             `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Longname       string             `protobuf:"bytes,2,opt,name=longname,proto3" json:"longname,omitempty"`
