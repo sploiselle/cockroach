@@ -556,6 +556,10 @@ message MetricMetadataRequest {
 
 // MetricMetadataResponse contains the metadata for all metics.
 message MetricMetadataResponse {
+  option (gogoproto.sizer) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.unmarshaler) = false;
+  
   map<int32, string> displayUnitKey = 1 [(gogoproto.nullable) = false];
   map<int32, string> metricTypeKey = 2 [(gogoproto.nullable) = false];
   map<string, cockroach.util.metric.Metadata> metadata = 3 [(gogoproto.nullable) = false];

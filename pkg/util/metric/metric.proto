@@ -47,10 +47,14 @@ enum DisplayUnit {
 // each metric object. It's used to export information about the
 // metric to Prometheus and for Admin UI charts.
 message Metadata {
+  option (gogoproto.sizer) = false;
+  option (gogoproto.marshaler) = false;
+  option (gogoproto.unmarshaler) = false;
+
   required string name = 1 [(gogoproto.nullable) = false];
   required string help = 2 [(gogoproto.nullable) = false];
   required string unit = 3 [(gogoproto.nullable) = false];
   required DisplayUnit displayUnit = 4 [(gogoproto.nullable) = false];
   optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
-  repeated LabelPair labels = 6;
+  repeated io.prometheus.client.LabelPair labels = 6;
 }

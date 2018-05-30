@@ -101,18 +101,19 @@ func (m *Metadata) GetDisplayUnit() DisplayUnit {
 
 // GetLabels returns the metric's labels.
 func (m *Metadata) GetLabels() []*prometheusgo.LabelPair {
-	lps := make([]*prometheusgo.LabelPair, 0)
-	var x []byte
-	for _, v := range m.Labels {
-		lps = append(lps, &prometheusgo.LabelPair{v.Name, v.Value, x})
-	}
-	return lps
+	// lps := make([]*prometheusgo.LabelPair, 0)
+	// var x []byte
+	// for _, v := range m.Labels {
+	// 	lps = append(lps, &prometheusgo.LabelPair{v.Name, v.Value, x})
+	// }
+	// return lps
+	return m.Labels
 }
 
 // AddLabel adds a label/value pair for this metric.
 func (m *Metadata) AddLabel(name, value string) {
 	m.Labels = append(m.Labels,
-		&LabelPair{
+		&prometheusgo.LabelPair{
 			Name:  proto.String(exportedLabel(name)),
 			Value: proto.String(value),
 		})
