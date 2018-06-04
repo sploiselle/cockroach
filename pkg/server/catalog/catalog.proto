@@ -12,51 +12,88 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-syntax = "proto3";
+syntax = "proto2";
 package cockroach.server.catalog;
 option go_package = "catalog";
 
+import "ts/tspb/timeseries.proto";
+
 import "gogoproto/gogo.proto";
+import "prometheus/client_model/metrics.proto";
 
 // AxisUnits describes the Unit options available in the Admin UI
 enum AxisUnits {
-  Unset = 0;
-  Count = 1;
-  Bytes = 2;
-  Duration = 3;
+  UNSET = 0;
+  COUNT = 1;
+  BYTES = 2;
+  DURATION = 3;
+}
+
+// DescribeAggregator works as a proxy for cockroach.ts.tspb.TimeSeriesQueryAggregator
+// which does not support an unset zero value
+enum DescribeAggregator {
+  UnsetAgg = 0;
+  // AVG returns the average value of datapoints.
+  AVG = 1;
+  // SUM returns the sum value of datapoints.
+  SUM = 2;
+  // MAX returns the maximum value of datapoints.
+  MAX = 3;
+  // MIN returns the minimum value of datapoints.
+  MIN = 4;
+}
+
+// DescribeDerivative works as a proxy for cockroach.ts.tspb.TimeSeriesQueryDerivative
+// which has an ambiguous zero value; it's unclear if the value isn't set or if it
+// is intentionally set to NONE.
+enum DescribeDerivative {
+  UnsetDer = 0;
+  // NONE is the default value, and does not apply a derivative function.
+  NONE = 1;
+  // DERIVATIVE returns the first-order derivative of values in the time series.
+  DERIVATIVE = 2;
+  // NON_NEGATIVE_DERIVATIVE returns only non-negative values of the first-order
+  // derivative; negative values are returned as zero. This should be used for
+  // counters that monotonically increase, but might wrap or reset.
+  NON_NEGATIVE_DERIVATIVE = 3;
+}
+
+message Organization {
+  repeated string Taxonomy = 1;
 }
 
 // ChartMetric converts cockroach.util.metric.Metadata
 // into a struct that's useful for generating Admin UI charts
 message ChartMetric {
-  string name = 1;
-  string help = 2;
-  string axisLabel = 3;
-  AxisUnits preferredUnits = 4;
+  required string name = 1 [(gogoproto.nullable) = false];
+  required string help = 2 [(gogoproto.nullable) = false];
+  required string axisLabel = 3 [(gogoproto.nullable) = false];
+  required AxisUnits preferredUnits = 4 [(gogoproto.nullable) = false];
+  optional io.prometheus.client.MetricType metricType = 5 [(gogoproto.nullable) = false];
 }
 
 // IndividualChart describes both the properties necessary to display
 // AdminUI charts, as well as a key to find them (collectionname)
 message IndividualChart {
-  string title = 1;
-  string longname = 2;
-  string collectionname = 3;
-	string downsampler = 4;
-	string aggregator = 5;
-	string derivative = 6;
-	AxisUnits units = 7;
-  string axisLabel = 8;
-  bool percentiles = 9;
-	repeated ChartMetric data = 10;
+  required string title = 1 [(gogoproto.nullable) = false];
+  required string longname = 2 [(gogoproto.nullable) = false];
+  required string collectionname = 3 [(gogoproto.nullable) = false];
+	required cockroach.ts.tspb.TimeSeriesQueryAggregator downsampler = 4;
+	required cockroach.ts.tspb.TimeSeriesQueryAggregator aggregator = 5;
+	required cockroach.ts.tspb.TimeSeriesQueryDerivative derivative = 6;
+	required AxisUnits units = 7 [(gogoproto.nullable) = false];
+  required string axisLabel = 8 [(gogoproto.nullable) = false];
+  required bool percentiles = 9 [(gogoproto.nullable) = false];
+	repeated ChartMetric data = 10 [(gogoproto.nullable) = false];
 }
 
 // ChartSection describes levels of organization for catalog charts
 message ChartSection {
-	string name = 1;
-	string longname = 2;
-  string collectionname = 3;
-  string description = 4;
-	int32 level = 5;
+	required string name = 1 [(gogoproto.nullable) = false];
+	required string longname = 2 [(gogoproto.nullable) = false];
+  required string collectionname = 3 [(gogoproto.nullable) = false];
+  required string description = 4 [(gogoproto.nullable) = false];
+	required int32 level = 5 [(gogoproto.nullable) = false];
 	repeated ChartSection subsections = 6;
 	repeated IndividualChart charts = 7;
 }
