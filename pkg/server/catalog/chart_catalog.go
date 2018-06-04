@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 
 	prometheusgo "github.com/prometheus/client_model/go"
@@ -17,38 +18,38 @@ type chartDescription struct {
 	// outer array lets you categorize the same chart in
 	// multiple places
 	Metrics     []string
-	Units       AxisUnits // Defaults to first metric's preferred units
-	AxisLabel   string    // Default to first metric's AxisLabel
-	Downsampler string    // Zero value is AVG
-	Aggregator  string    // AVG by default
-	Rate        string    // Default depends on type
-	Percentiles bool      // True only for Histograms
+	Units       AxisUnits          // Defaults to first metric's preferred units
+	AxisLabel   string             // Default to first metric's AxisLabel
+	Downsampler DescribeAggregator // Zero value is AVG
+	Aggregator  DescribeAggregator // Zero value is SUM
+	Rate        DescribeDerivative // Zero value i depends on type
+	Percentiles bool               // True only for Histograms
 }
 
 type chartDefaults struct {
-	Downsampler string // AVG by default
-	Aggregator  string // AVG by default
-	Rate        string // Default depends on type
-	Percentiles bool   // True only for Latency and Histogram metrics
+	Downsampler DescribeAggregator // Zero value is AVG
+	Aggregator  DescribeAggregator // Zero value is SUM
+	Rate        DescribeDerivative // Zero value depends on metric type
+	Percentiles bool               // True only for Latency and Histogram metrics
 }
 
 var chartDefaultsPerMetricType = map[prometheusgo.MetricType]chartDefaults{
 	prometheusgo.MetricType_COUNTER: chartDefaults{
-		Downsampler: "AVG",
-		Aggregator:  "AVG",
-		Rate:        "Non-negative rate",
+		Downsampler: DescribeAggregator_AVG,
+		Aggregator:  DescribeAggregator_SUM,
+		Rate:        DescribeDerivative_NON_NEGATIVE_DERIVATIVE,
 		Percentiles: false,
 	},
 	prometheusgo.MetricType_GAUGE: chartDefaults{
-		Downsampler: "AVG",
-		Aggregator:  "AVG",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_AVG,
+		Aggregator:  DescribeAggregator_SUM,
+		Rate:        DescribeDerivative_NONE,
 		Percentiles: false,
 	},
 	prometheusgo.MetricType_HISTOGRAM: chartDefaults{
-		Downsampler: "AVG",
-		Aggregator:  "AVG",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_AVG,
+		Aggregator:  DescribeAggregator_SUM,
+		Rate:        DescribeDerivative_NONE,
 		Percentiles: true,
 	},
 }
@@ -112,9 +113,7 @@ var charts = []chartDescription{
 			{KVTransactionLayer, "Requests", "Backpressure"},
 			{ReplicationLayer, "Requests", "Backpressure"},
 		},
-		Downsampler: "MAX",
-		Aggregator:  "MAX",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics:     []string{"requests.backpressure.split"},
 	},
@@ -132,9 +131,7 @@ var charts = []chartDescription{
 	{
 		Name:         "Timestamp",
 		Organization: [][]string{{Process, "Build Info"}},
-		Downsampler:  "MAX",
-		Aggregator:   "MAX",
-		Rate:         "Normal",
+		Downsampler:  DescribeAggregator_MAX,
 		Percentiles:  false,
 		Metrics:      []string{"build.timestamp"},
 	},
@@ -159,15 +156,13 @@ var charts = []chartDescription{
 		Metrics: []string{"gossip.bytes.received",
 			"gossip.bytes.sent"},
 	},
-	// {
-	// 	Name:         "CA Expiration",
-	// 	Organization: [][]string{{Process, "Certificates"}},
-	// 	Downsampler:  "MAX",
-	// 	Aggregator:   "MAX",
-	// 	Rate:         "Normal",
-	// 	Percentiles:  false,
-	// 	Metrics:      []string{"security.certificate.expiration.ca"},
-	// },
+	{
+		Name:         "CA Expiration",
+		Organization: [][]string{{Process, "Certificates"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"security.certificate.expiration.ca"},
+	},
 	{
 		Name:         "Memory",
 		Organization: [][]string{{Process, "Server", "cgo"}},
@@ -218,9 +213,7 @@ var charts = []chartDescription{
 	{
 		Name:         "Connections",
 		Organization: [][]string{{DistributionLayer, "Gossip"}},
-		Downsampler:  "MAX",
-		Aggregator:   "AVG",
-		Rate:         "Normal",
+		Downsampler:  DescribeAggregator_MAX,
 		Percentiles:  false,
 		Metrics: []string{"gossip.connections.refused",
 			"gossip.connections.incoming",
@@ -319,9 +312,8 @@ var charts = []chartDescription{
 	{
 		Name:         "Success",
 		Organization: [][]string{{KVTransactionLayer, "Requests", "Overview"}},
-		Downsampler:  "MAX",
-		Aggregator:   "AVG",
-		Rate:         "Rate",
+		Downsampler:  DescribeAggregator_MAX,
+		Rate:         DescribeDerivative_DERIVATIVE,
 		Percentiles:  false,
 		Metrics: []string{"exec.error",
 			"exec.success"},
@@ -509,9 +501,7 @@ var charts = []chartDescription{
 	{
 		Name:         "Metric Update Frequency",
 		Organization: [][]string{{KVTransactionLayer, "Storage"}},
-		Downsampler:  "AVG",
-		Aggregator:   "AVG",
-		Rate:         "Rate",
+		Rate:         DescribeDerivative_DERIVATIVE,
 		Percentiles:  false,
 		Metrics:      []string{"lastupdatenanos"},
 	},
@@ -563,9 +553,7 @@ var charts = []chartDescription{
 	{
 		Name:         "Node Count",
 		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
-		Downsampler:  "MAX",
-		Aggregator:   "MAX",
-		Rate:         "Normal",
+		Downsampler:  DescribeAggregator_MAX,
 		Percentiles:  false,
 		Metrics:      []string{"liveness.livenodes"},
 	},
@@ -622,18 +610,16 @@ var charts = []chartDescription{
 	// {
 	// 	Name:         "Node Cert Expiration",
 	// 	Organization: [][]string{{Process, "Certificates"}},
-	// 	Downsampler:  "MAX",
-	// 	Aggregator:   "MAX",
-	// 	Rate:         "Normal",
+	// 	Downsampler:  tspb.TimeSeriesQueryAggregator_MAX,
+	// 	Aggregator:   tspb.TimeSeriesQueryAggregator_MAX,
+	// 	Rate:         tspb.TimeSeriesQueryDerivative_NONE,
 	// 	Percentiles:  false,
 	// 	Metrics:      []string{"security.certificate.expiration.node"},
 	// },
 	{
 		Name:         "ID",
 		Organization: [][]string{{Process, "Node"}},
-		Downsampler:  "MAX",
-		Aggregator:   "MAX",
-		Rate:         "Normal",
+		Downsampler:  DescribeAggregator_MAX,
 		Percentiles:  false,
 		Metrics:      []string{"node-id"},
 	},
@@ -947,9 +933,7 @@ var charts = []chartDescription{
 	{
 		Name:         "Restarts",
 		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
-		Downsampler:  "MAX",
-		Aggregator:   "MAX",
-		Rate:         "Normal",
+		Downsampler:  DescribeAggregator_MAX,
 		Percentiles:  true,
 		Metrics:      []string{"txn.restarts"},
 	},
@@ -1001,9 +985,7 @@ var charts = []chartDescription{
 		Organization: [][]string{{KVTransactionLayer, "Requests", "Slow"},
 			{
 				ReplicationLayer, "Requests", "Slow"}},
-		Downsampler: "MAX",
-		Aggregator:  "MAX",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics:     []string{"requests.slow.commandqueue"},
 	},
@@ -1012,9 +994,7 @@ var charts = []chartDescription{
 		Organization: [][]string{{KVTransactionLayer, "Requests", "Slow"},
 			{
 				ReplicationLayer, "Requests", "Slow"}},
-		Downsampler: "MAX",
-		Aggregator:  "MAX",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics:     []string{"requests.slow.commandqueue"},
 	},
@@ -1033,9 +1013,7 @@ var charts = []chartDescription{
 		Organization: [][]string{{KVTransactionLayer, "Requests", "Slow"},
 			{
 				ReplicationLayer, "Requests", "Slow"}},
-		Downsampler: "MAX",
-		Aggregator:  "MAX",
-		Rate:        "Normal",
+		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics:     []string{"requests.slow.raft"},
 	},
@@ -1049,9 +1027,7 @@ var charts = []chartDescription{
 		Organization: [][]string{{DistributionLayer, "Split Queue"},
 			{
 				ReplicationLayer, "Split Queue"}},
-		Downsampler: "MAX",
-		Aggregator:  "AVG",
-		Rate:        "Rate",
+		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics: []string{"queue.split.process.failure",
 			"queue.split.pending",
@@ -1152,7 +1128,7 @@ var charts = []chartDescription{
 
 type ChartCatalog []ChartSection
 
-var cc ChartCatalog = ChartCatalog{
+var cc = ChartCatalog{
 	{
 		Name:           Process,
 		Longname:       Process,
@@ -1219,6 +1195,7 @@ var cc ChartCatalog = ChartCatalog{
 	},
 }
 
+// catalogKey creates an index for looking up sections in the ChartCatalog.
 var catalogKey = map[string]int{
 	Process:            0,
 	SQLLayer:           1,
@@ -1229,15 +1206,34 @@ var catalogKey = map[string]int{
 	Timeseries:         6,
 }
 
-// Converts between metric.DisplayUnit and catalog.AxisUnits which is necessary
-// because charts only support a subset of unit types
-var metadataUnitsToChartUnits = map[metric.DisplayUnit]AxisUnits{
-	metric.DisplayUnit_Bytes:       AxisUnits_Bytes,
-	metric.DisplayUnit_Const:       AxisUnits_Count,
-	metric.DisplayUnit_Count:       AxisUnits_Count,
-	metric.DisplayUnit_Nanoseconds: AxisUnits_Duration,
-	metric.DisplayUnit_Percent:     AxisUnits_Count,
-	metric.DisplayUnit_Timestamp:   AxisUnits_Duration,
+// unitsKey converts between metric.DisplayUnit and catalog.AxisUnits
+// which is necessary because charts only support a subset of unit types
+var unitsKey = map[metric.DisplayUnit]AxisUnits{
+	metric.DisplayUnit_BYTES:       AxisUnits_BYTES,
+	metric.DisplayUnit_CONST:       AxisUnits_COUNT,
+	metric.DisplayUnit_COUNT:       AxisUnits_COUNT,
+	metric.DisplayUnit_NANOSECONDS: AxisUnits_DURATION,
+	metric.DisplayUnit_PERCENT:     AxisUnits_COUNT,
+	metric.DisplayUnit_TIMESTAMP:   AxisUnits_DURATION,
+}
+
+// aggKey converts between catalog.DescribeAggregator to tspb.TimeSeriesQueryAggregator
+// which is necessary because tspb.TimeSeriesQueryAggregator doesn't have a checkable
+// zero value, which the catalog requires to support defaults
+var aggKey = map[DescribeAggregator]tspb.TimeSeriesQueryAggregator{
+	DescribeAggregator_AVG: tspb.TimeSeriesQueryAggregator_AVG,
+	DescribeAggregator_MAX: tspb.TimeSeriesQueryAggregator_MAX,
+	DescribeAggregator_MIN: tspb.TimeSeriesQueryAggregator_MIN,
+	DescribeAggregator_SUM: tspb.TimeSeriesQueryAggregator_SUM,
+}
+
+// derKey converts between catalog.DescribeAggregator to tspb.TimeSeriesQueryDerivative
+// which is necessary because tspb.TimeSeriesQueryDerivative doesn't have a checkable
+// zero value, which the catalog requires to support defaults
+var derKey = map[DescribeDerivative]tspb.TimeSeriesQueryDerivative{
+	DescribeDerivative_DERIVATIVE:              tspb.TimeSeriesQueryDerivative_DERIVATIVE,
+	DescribeDerivative_NONE:                    tspb.TimeSeriesQueryDerivative_NONE,
+	DescribeDerivative_NON_NEGATIVE_DERIVATIVE: tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE,
 }
 
 func GenerateCatalog(metadata map[string]metric.Metadata) ChartCatalog {
@@ -1265,7 +1261,13 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ChartCatalog {
 
 			ic := createIndividualChart(metadata, cd, organization, collectionNameArr)
 
-			cc[parentCatalogIndex].addChart(organization, collectionNameArr, ic)
+			// If chart has no Data, skip. e.g. nodes without SSLs do not have certificate
+			// expiration timestamps, so those charts should not be added to the catalog.
+			if len(ic.Data) == 0 {
+				continue
+			}
+
+			cc[parentCatalogIndex].addChartAndSubsections(organization, collectionNameArr, ic)
 		}
 	}
 
@@ -1294,12 +1296,18 @@ func createIndividualChart(
 	collectionNameArr []string) IndividualChart {
 
 	var ic IndividualChart
-	ic.addNames(cd.Name, organization, collectionNameArr)
+
 	ic.addMetrics(metadata, cd.Metrics)
 
-	// Get Charts Defaults from its first Metrc's MetricType, which is only available from
-	// metadata
-	mt := metadata[ic.Data[0].Name].MetricType
+	// If chart has no data, abandon
+	if len(ic.Data) == 0 {
+		return ic
+	}
+
+	ic.addNames(cd.Name, organization, collectionNameArr)
+
+	// Get Charts Defaults from its first Metrc's MetricType
+	mt := ic.Data[0].MetricType
 
 	d := chartDefaultsPerMetricType[mt]
 
@@ -1330,20 +1338,22 @@ func (ic *IndividualChart) addMetrics(metadata map[string]metric.Metadata, metri
 
 		md, ok := metadata[n]
 
-		// If metric is missing from metadata, don't add it to this chart
-		// because we won't be able to calculate it
+		// If metric is missing from metadata, don't add it to this chart e.g. nodes without
+		// SSLs do not have certificate expiration timestamps, so those charts should not be
+		// added to the catalog.
 		if !ok {
-			fmt.Printf("Trying to use metric %v, but it doesn't exist\n", n)
+			continue
 		}
 
-		ic.Data = append(ic.Data, &ChartMetric{
+		ic.Data = append(ic.Data, ChartMetric{
 			Name:           md.Name,
 			Help:           md.Help,
 			AxisLabel:      md.Unit,
-			PreferredUnits: metadataUnitsToChartUnits[md.DisplayUnit],
+			PreferredUnits: unitsKey[md.DisplayUnit],
+			MetricType:     md.MetricType,
 		})
 
-		if metadata[ic.Data[0].Name].MetricType != metadata[md.Name].MetricType {
+		if ic.Data[0].MetricType != md.MetricType {
 			fmt.Printf("%v and %v have different MetricTypes\n", ic.Data[0].Name, md.Name)
 		}
 	}
@@ -1353,44 +1363,52 @@ func (ic *IndividualChart) addMetrics(metadata map[string]metric.Metadata, metri
 func (ic *IndividualChart) addDisplayProperties(cd chartDescription, d chartDefaults) {
 
 	// Set all zero values to the chartDefault's value
-	if cd.Downsampler == "" {
+	if cd.Downsampler == DescribeAggregator_UnsetAgg {
 		cd.Downsampler = d.Downsampler
 	}
-	if cd.Aggregator == "" {
+	if cd.Aggregator == DescribeAggregator_UnsetAgg {
 		cd.Aggregator = d.Aggregator
 	}
-	if cd.Rate == "" {
+	if cd.Rate == DescribeDerivative_UnsetDer {
 		cd.Rate = d.Rate
 	}
 	if cd.Percentiles == false {
 		cd.Percentiles = d.Percentiles
 	}
 
-	// Set unspecified AxisUnits to the first metric's value
-	if cd.Units == AxisUnits_Unset {
+	// Set unspecified AxisUnits to the first metric's value.
+	if cd.Units == AxisUnits_UNSET {
 		cd.Units = ic.Data[0].PreferredUnits
 	}
 
-	// Set unspecified AxisLabels to the first metric's value
+	// Set unspecified AxisLabels to the first metric's value.
 	if cd.AxisLabel == "" {
 		cd.AxisLabel = ic.Data[0].AxisLabel
 	}
 
-	// Populate rest of thisChart
-	ic.Downsampler = cd.Downsampler
-	ic.Aggregator = cd.Aggregator
-	ic.Derivative = cd.Rate
+	// Populate rest of ic.
+	ds := aggKey[cd.Downsampler]
+	ic.Downsampler = &ds
+	agg := aggKey[cd.Aggregator]
+	ic.Aggregator = &agg
+	der := derKey[cd.Rate]
+	ic.Derivative = &der
 	ic.Percentiles = cd.Percentiles
 	ic.Units = cd.Units
 	ic.AxisLabel = cd.AxisLabel
 }
 
-func (cs *ChartSection) addChart(organization []string, collectionNameArr []string, ic IndividualChart) {
+func (cs *ChartSection) addChartAndSubsections(organization []string, collectionNameArr []string, ic IndividualChart) {
 	var childSection *ChartSection
 	childLevel := int(cs.Level + 1)
 
-	var found bool
+	// childSection contains a slice of pointers, so it cannot be readily
+	// compared to an ChartSection{}; instead use a bool to track if it's
+	// found.
+	found := false
 
+	// range over Subsections looking for a child with the same Name
+	// as the level of the organization slice being processed.
 	for _, s := range cs.Subsections {
 		if s.Name == organization[childLevel] {
 			found = true
@@ -1399,6 +1417,7 @@ func (cs *ChartSection) addChart(organization []string, collectionNameArr []stri
 		}
 	}
 
+	// If not found create a the ChartSection
 	if !found {
 		childSection = &ChartSection{
 			Name:           organization[childLevel],
@@ -1415,9 +1434,10 @@ func (cs *ChartSection) addChart(organization []string, collectionNameArr []stri
 		cs.Subsections = append(cs.Subsections, childSection)
 	}
 
+	// Either add ic to childSection or add a Subsection to this childSection.
 	if childLevel == (len(organization) - 1) {
 		childSection.Charts = append(childSection.Charts, &ic)
 	} else {
-		childSection.addChart(organization, collectionNameArr, ic)
+		childSection.addChartAndSubsections(organization, collectionNameArr, ic)
 	}
 }

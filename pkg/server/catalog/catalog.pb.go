@@ -8,6 +8,7 @@
 		server/catalog/catalog.proto
 
 	It has these top-level messages:
+		Organization
 		ChartMetric
 		IndividualChart
 		ChartSection
@@ -17,6 +18,8 @@ package catalog
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import cockroach_ts_tspb "github.com/cockroachdb/cockroach/pkg/ts/tspb"
+import io_prometheus_client "github.com/prometheus/client_model/go"
 
 import io "io"
 
@@ -35,71 +38,191 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 type AxisUnits int32
 
 const (
-	AxisUnits_Unset    AxisUnits = 0
-	AxisUnits_Count    AxisUnits = 1
-	AxisUnits_Bytes    AxisUnits = 2
-	AxisUnits_Duration AxisUnits = 3
+	AxisUnits_UNSET    AxisUnits = 0
+	AxisUnits_COUNT    AxisUnits = 1
+	AxisUnits_BYTES    AxisUnits = 2
+	AxisUnits_DURATION AxisUnits = 3
 )
 
 var AxisUnits_name = map[int32]string{
-	0: "Unset",
-	1: "Count",
-	2: "Bytes",
-	3: "Duration",
+	0: "UNSET",
+	1: "COUNT",
+	2: "BYTES",
+	3: "DURATION",
 }
 var AxisUnits_value = map[string]int32{
-	"Unset":    0,
-	"Count":    1,
-	"Bytes":    2,
-	"Duration": 3,
+	"UNSET":    0,
+	"COUNT":    1,
+	"BYTES":    2,
+	"DURATION": 3,
 }
 
+func (x AxisUnits) Enum() *AxisUnits {
+	p := new(AxisUnits)
+	*p = x
+	return p
+}
 func (x AxisUnits) String() string {
 	return proto.EnumName(AxisUnits_name, int32(x))
 }
+func (x *AxisUnits) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(AxisUnits_value, data, "AxisUnits")
+	if err != nil {
+		return err
+	}
+	*x = AxisUnits(value)
+	return nil
+}
 func (AxisUnits) EnumDescriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{0} }
+
+// DescribeAggregator works as a proxy for cockroach.ts.tspb.TimeSeriesQueryAggregator
+// which does not support an unset zero value
+type DescribeAggregator int32
+
+const (
+	DescribeAggregator_UnsetAgg DescribeAggregator = 0
+	// AVG returns the average value of datapoints.
+	DescribeAggregator_AVG DescribeAggregator = 1
+	// SUM returns the sum value of datapoints.
+	DescribeAggregator_SUM DescribeAggregator = 2
+	// MAX returns the maximum value of datapoints.
+	DescribeAggregator_MAX DescribeAggregator = 3
+	// MIN returns the minimum value of datapoints.
+	DescribeAggregator_MIN DescribeAggregator = 4
+)
+
+var DescribeAggregator_name = map[int32]string{
+	0: "UnsetAgg",
+	1: "AVG",
+	2: "SUM",
+	3: "MAX",
+	4: "MIN",
+}
+var DescribeAggregator_value = map[string]int32{
+	"UnsetAgg": 0,
+	"AVG":      1,
+	"SUM":      2,
+	"MAX":      3,
+	"MIN":      4,
+}
+
+func (x DescribeAggregator) Enum() *DescribeAggregator {
+	p := new(DescribeAggregator)
+	*p = x
+	return p
+}
+func (x DescribeAggregator) String() string {
+	return proto.EnumName(DescribeAggregator_name, int32(x))
+}
+func (x *DescribeAggregator) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(DescribeAggregator_value, data, "DescribeAggregator")
+	if err != nil {
+		return err
+	}
+	*x = DescribeAggregator(value)
+	return nil
+}
+func (DescribeAggregator) EnumDescriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{1} }
+
+// DescribeDerivative works as a proxy for cockroach.ts.tspb.TimeSeriesQueryDerivative
+// which has an ambiguous zero value; it's unclear if the value isn't set or if it
+// is intentionally set to NONE.
+type DescribeDerivative int32
+
+const (
+	DescribeDerivative_UnsetDer DescribeDerivative = 0
+	// NONE is the default value, and does not apply a derivative function.
+	DescribeDerivative_NONE DescribeDerivative = 1
+	// DERIVATIVE returns the first-order derivative of values in the time series.
+	DescribeDerivative_DERIVATIVE DescribeDerivative = 2
+	// NON_NEGATIVE_DERIVATIVE returns only non-negative values of the first-order
+	// derivative; negative values are returned as zero. This should be used for
+	// counters that monotonically increase, but might wrap or reset.
+	DescribeDerivative_NON_NEGATIVE_DERIVATIVE DescribeDerivative = 3
+)
+
+var DescribeDerivative_name = map[int32]string{
+	0: "UnsetDer",
+	1: "NONE",
+	2: "DERIVATIVE",
+	3: "NON_NEGATIVE_DERIVATIVE",
+}
+var DescribeDerivative_value = map[string]int32{
+	"UnsetDer":                0,
+	"NONE":                    1,
+	"DERIVATIVE":              2,
+	"NON_NEGATIVE_DERIVATIVE": 3,
+}
+
+func (x DescribeDerivative) Enum() *DescribeDerivative {
+	p := new(DescribeDerivative)
+	*p = x
+	return p
+}
+func (x DescribeDerivative) String() string {
+	return proto.EnumName(DescribeDerivative_name, int32(x))
+}
+func (x *DescribeDerivative) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(DescribeDerivative_value, data, "DescribeDerivative")
+	if err != nil {
+		return err
+	}
+	*x = DescribeDerivative(value)
+	return nil
+}
+func (DescribeDerivative) EnumDescriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{2} }
+
+type Organization struct {
+	Taxonomy []string `protobuf:"bytes,1,rep,name=Taxonomy" json:"Taxonomy,omitempty"`
+}
+
+func (m *Organization) Reset()                    { *m = Organization{} }
+func (m *Organization) String() string            { return proto.CompactTextString(m) }
+func (*Organization) ProtoMessage()               {}
+func (*Organization) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{0} }
 
 // ChartMetric converts cockroach.util.metric.Metadata
 // into a struct that's useful for generating Admin UI charts
 type ChartMetric struct {
-	Name           string    `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Help           string    `protobuf:"bytes,2,opt,name=help,proto3" json:"help,omitempty"`
-	AxisLabel      string    `protobuf:"bytes,3,opt,name=axisLabel,proto3" json:"axisLabel,omitempty"`
-	PreferredUnits AxisUnits `protobuf:"varint,4,opt,name=preferredUnits,proto3,enum=cockroach.server.catalog.AxisUnits" json:"preferredUnits,omitempty"`
+	Name           string                          `protobuf:"bytes,1,req,name=name" json:"name"`
+	Help           string                          `protobuf:"bytes,2,req,name=help" json:"help"`
+	AxisLabel      string                          `protobuf:"bytes,3,req,name=axisLabel" json:"axisLabel"`
+	PreferredUnits AxisUnits                       `protobuf:"varint,4,req,name=preferredUnits,enum=cockroach.server.catalog.AxisUnits" json:"preferredUnits"`
+	MetricType     io_prometheus_client.MetricType `protobuf:"varint,5,opt,name=metricType,enum=io.prometheus.client.MetricType" json:"metricType"`
 }
 
 func (m *ChartMetric) Reset()                    { *m = ChartMetric{} }
 func (m *ChartMetric) String() string            { return proto.CompactTextString(m) }
 func (*ChartMetric) ProtoMessage()               {}
-func (*ChartMetric) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{0} }
+func (*ChartMetric) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{1} }
 
 // IndividualChart describes both the properties necessary to display
 // AdminUI charts, as well as a key to find them (collectionname)
 type IndividualChart struct {
-	Title          string         `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	Longname       string         `protobuf:"bytes,2,opt,name=longname,proto3" json:"longname,omitempty"`
-	Collectionname string         `protobuf:"bytes,3,opt,name=collectionname,proto3" json:"collectionname,omitempty"`
-	Downsampler    string         `protobuf:"bytes,4,opt,name=downsampler,proto3" json:"downsampler,omitempty"`
-	Aggregator     string         `protobuf:"bytes,5,opt,name=aggregator,proto3" json:"aggregator,omitempty"`
-	Derivative     string         `protobuf:"bytes,6,opt,name=derivative,proto3" json:"derivative,omitempty"`
-	Units          AxisUnits      `protobuf:"varint,7,opt,name=units,proto3,enum=cockroach.server.catalog.AxisUnits" json:"units,omitempty"`
-	AxisLabel      string         `protobuf:"bytes,8,opt,name=axisLabel,proto3" json:"axisLabel,omitempty"`
-	Percentiles    bool           `protobuf:"varint,9,opt,name=percentiles,proto3" json:"percentiles,omitempty"`
-	Data           []*ChartMetric `protobuf:"bytes,10,rep,name=data" json:"data,omitempty"`
+	Title          string                                       `protobuf:"bytes,1,req,name=title" json:"title"`
+	Longname       string                                       `protobuf:"bytes,2,req,name=longname" json:"longname"`
+	Collectionname string                                       `protobuf:"bytes,3,req,name=collectionname" json:"collectionname"`
+	Downsampler    *cockroach_ts_tspb.TimeSeriesQueryAggregator `protobuf:"varint,4,req,name=downsampler,enum=cockroach.ts.tspb.TimeSeriesQueryAggregator" json:"downsampler,omitempty"`
+	Aggregator     *cockroach_ts_tspb.TimeSeriesQueryAggregator `protobuf:"varint,5,req,name=aggregator,enum=cockroach.ts.tspb.TimeSeriesQueryAggregator" json:"aggregator,omitempty"`
+	Derivative     *cockroach_ts_tspb.TimeSeriesQueryDerivative `protobuf:"varint,6,req,name=derivative,enum=cockroach.ts.tspb.TimeSeriesQueryDerivative" json:"derivative,omitempty"`
+	Units          AxisUnits                                    `protobuf:"varint,7,req,name=units,enum=cockroach.server.catalog.AxisUnits" json:"units"`
+	AxisLabel      string                                       `protobuf:"bytes,8,req,name=axisLabel" json:"axisLabel"`
+	Percentiles    bool                                         `protobuf:"varint,9,req,name=percentiles" json:"percentiles"`
+	Data           []ChartMetric                                `protobuf:"bytes,10,rep,name=data" json:"data"`
 }
 
 func (m *IndividualChart) Reset()                    { *m = IndividualChart{} }
 func (m *IndividualChart) String() string            { return proto.CompactTextString(m) }
 func (*IndividualChart) ProtoMessage()               {}
-func (*IndividualChart) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{1} }
+func (*IndividualChart) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{2} }
 
 // ChartSection describes levels of organization for catalog charts
 type ChartSection struct {
-	Name           string             `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Longname       string             `protobuf:"bytes,2,opt,name=longname,proto3" json:"longname,omitempty"`
-	Collectionname string             `protobuf:"bytes,3,opt,name=collectionname,proto3" json:"collectionname,omitempty"`
-	Description    string             `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Level          int32              `protobuf:"varint,5,opt,name=level,proto3" json:"level,omitempty"`
+	Name           string             `protobuf:"bytes,1,req,name=name" json:"name"`
+	Longname       string             `protobuf:"bytes,2,req,name=longname" json:"longname"`
+	Collectionname string             `protobuf:"bytes,3,req,name=collectionname" json:"collectionname"`
+	Description    string             `protobuf:"bytes,4,req,name=description" json:"description"`
+	Level          int32              `protobuf:"varint,5,req,name=level" json:"level"`
 	Subsections    []*ChartSection    `protobuf:"bytes,6,rep,name=subsections" json:"subsections,omitempty"`
 	Charts         []*IndividualChart `protobuf:"bytes,7,rep,name=charts" json:"charts,omitempty"`
 }
@@ -107,14 +230,50 @@ type ChartSection struct {
 func (m *ChartSection) Reset()                    { *m = ChartSection{} }
 func (m *ChartSection) String() string            { return proto.CompactTextString(m) }
 func (*ChartSection) ProtoMessage()               {}
-func (*ChartSection) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{2} }
+func (*ChartSection) Descriptor() ([]byte, []int) { return fileDescriptorCatalog, []int{3} }
 
 func init() {
+	proto.RegisterType((*Organization)(nil), "cockroach.server.catalog.Organization")
 	proto.RegisterType((*ChartMetric)(nil), "cockroach.server.catalog.ChartMetric")
 	proto.RegisterType((*IndividualChart)(nil), "cockroach.server.catalog.IndividualChart")
 	proto.RegisterType((*ChartSection)(nil), "cockroach.server.catalog.ChartSection")
 	proto.RegisterEnum("cockroach.server.catalog.AxisUnits", AxisUnits_name, AxisUnits_value)
+	proto.RegisterEnum("cockroach.server.catalog.DescribeAggregator", DescribeAggregator_name, DescribeAggregator_value)
+	proto.RegisterEnum("cockroach.server.catalog.DescribeDerivative", DescribeDerivative_name, DescribeDerivative_value)
 }
+func (m *Organization) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *Organization) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Taxonomy) > 0 {
+		for _, s := range m.Taxonomy {
+			dAtA[i] = 0xa
+			i++
+			l = len(s)
+			for l >= 1<<7 {
+				dAtA[i] = uint8(uint64(l)&0x7f | 0x80)
+				l >>= 7
+				i++
+			}
+			dAtA[i] = uint8(l)
+			i++
+			i += copy(dAtA[i:], s)
+		}
+	}
+	return i, nil
+}
+
 func (m *ChartMetric) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -130,29 +289,24 @@ func (m *ChartMetric) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Name) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Name)))
-		i += copy(dAtA[i:], m.Name)
-	}
-	if len(m.Help) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Help)))
-		i += copy(dAtA[i:], m.Help)
-	}
-	if len(m.AxisLabel) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.AxisLabel)))
-		i += copy(dAtA[i:], m.AxisLabel)
-	}
-	if m.PreferredUnits != 0 {
-		dAtA[i] = 0x20
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(m.PreferredUnits))
-	}
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Help)))
+	i += copy(dAtA[i:], m.Help)
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.AxisLabel)))
+	i += copy(dAtA[i:], m.AxisLabel)
+	dAtA[i] = 0x20
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(m.PreferredUnits))
+	dAtA[i] = 0x28
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(m.MetricType))
 	return i, nil
 }
 
@@ -171,63 +325,54 @@ func (m *IndividualChart) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Title) > 0 {
-		dAtA[i] = 0xa
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Title)))
+	i += copy(dAtA[i:], m.Title)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Longname)))
+	i += copy(dAtA[i:], m.Longname)
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Collectionname)))
+	i += copy(dAtA[i:], m.Collectionname)
+	if m.Downsampler == nil {
+		return 0, proto.NewRequiredNotSetError("downsampler")
+	} else {
+		dAtA[i] = 0x20
 		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Title)))
-		i += copy(dAtA[i:], m.Title)
+		i = encodeVarintCatalog(dAtA, i, uint64(*m.Downsampler))
 	}
-	if len(m.Longname) > 0 {
-		dAtA[i] = 0x12
+	if m.Aggregator == nil {
+		return 0, proto.NewRequiredNotSetError("aggregator")
+	} else {
+		dAtA[i] = 0x28
 		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Longname)))
-		i += copy(dAtA[i:], m.Longname)
+		i = encodeVarintCatalog(dAtA, i, uint64(*m.Aggregator))
 	}
-	if len(m.Collectionname) > 0 {
-		dAtA[i] = 0x1a
+	if m.Derivative == nil {
+		return 0, proto.NewRequiredNotSetError("derivative")
+	} else {
+		dAtA[i] = 0x30
 		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Collectionname)))
-		i += copy(dAtA[i:], m.Collectionname)
+		i = encodeVarintCatalog(dAtA, i, uint64(*m.Derivative))
 	}
-	if len(m.Downsampler) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Downsampler)))
-		i += copy(dAtA[i:], m.Downsampler)
-	}
-	if len(m.Aggregator) > 0 {
-		dAtA[i] = 0x2a
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Aggregator)))
-		i += copy(dAtA[i:], m.Aggregator)
-	}
-	if len(m.Derivative) > 0 {
-		dAtA[i] = 0x32
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Derivative)))
-		i += copy(dAtA[i:], m.Derivative)
-	}
-	if m.Units != 0 {
-		dAtA[i] = 0x38
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(m.Units))
-	}
-	if len(m.AxisLabel) > 0 {
-		dAtA[i] = 0x42
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.AxisLabel)))
-		i += copy(dAtA[i:], m.AxisLabel)
-	}
+	dAtA[i] = 0x38
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(m.Units))
+	dAtA[i] = 0x42
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.AxisLabel)))
+	i += copy(dAtA[i:], m.AxisLabel)
+	dAtA[i] = 0x48
+	i++
 	if m.Percentiles {
-		dAtA[i] = 0x48
-		i++
-		if m.Percentiles {
-			dAtA[i] = 1
-		} else {
-			dAtA[i] = 0
-		}
-		i++
+		dAtA[i] = 1
+	} else {
+		dAtA[i] = 0
 	}
+	i++
 	if len(m.Data) > 0 {
 		for _, msg := range m.Data {
 			dAtA[i] = 0x52
@@ -258,35 +403,25 @@ func (m *ChartSection) MarshalTo(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if len(m.Name) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Name)))
-		i += copy(dAtA[i:], m.Name)
-	}
-	if len(m.Longname) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Longname)))
-		i += copy(dAtA[i:], m.Longname)
-	}
-	if len(m.Collectionname) > 0 {
-		dAtA[i] = 0x1a
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Collectionname)))
-		i += copy(dAtA[i:], m.Collectionname)
-	}
-	if len(m.Description) > 0 {
-		dAtA[i] = 0x22
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(len(m.Description)))
-		i += copy(dAtA[i:], m.Description)
-	}
-	if m.Level != 0 {
-		dAtA[i] = 0x28
-		i++
-		i = encodeVarintCatalog(dAtA, i, uint64(m.Level))
-	}
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Name)))
+	i += copy(dAtA[i:], m.Name)
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Longname)))
+	i += copy(dAtA[i:], m.Longname)
+	dAtA[i] = 0x1a
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Collectionname)))
+	i += copy(dAtA[i:], m.Collectionname)
+	dAtA[i] = 0x22
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(len(m.Description)))
+	i += copy(dAtA[i:], m.Description)
+	dAtA[i] = 0x28
+	i++
+	i = encodeVarintCatalog(dAtA, i, uint64(m.Level))
 	if len(m.Subsections) > 0 {
 		for _, msg := range m.Subsections {
 			dAtA[i] = 0x32
@@ -323,24 +458,29 @@ func encodeVarintCatalog(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return offset + 1
 }
+func (m *Organization) Size() (n int) {
+	var l int
+	_ = l
+	if len(m.Taxonomy) > 0 {
+		for _, s := range m.Taxonomy {
+			l = len(s)
+			n += 1 + l + sovCatalog(uint64(l))
+		}
+	}
+	return n
+}
+
 func (m *ChartMetric) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Help)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.AxisLabel)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
-	if m.PreferredUnits != 0 {
-		n += 1 + sovCatalog(uint64(m.PreferredUnits))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
+	n += 1 + sovCatalog(uint64(m.PreferredUnits))
+	n += 1 + sovCatalog(uint64(m.MetricType))
 	return n
 }
 
@@ -348,39 +488,24 @@ func (m *IndividualChart) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Title)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Longname)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Collectionname)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
+	n += 1 + l + sovCatalog(uint64(l))
+	if m.Downsampler != nil {
+		n += 1 + sovCatalog(uint64(*m.Downsampler))
 	}
-	l = len(m.Downsampler)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
+	if m.Aggregator != nil {
+		n += 1 + sovCatalog(uint64(*m.Aggregator))
 	}
-	l = len(m.Aggregator)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
+	if m.Derivative != nil {
+		n += 1 + sovCatalog(uint64(*m.Derivative))
 	}
-	l = len(m.Derivative)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
-	if m.Units != 0 {
-		n += 1 + sovCatalog(uint64(m.Units))
-	}
+	n += 1 + sovCatalog(uint64(m.Units))
 	l = len(m.AxisLabel)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
-	if m.Percentiles {
-		n += 2
-	}
+	n += 1 + l + sovCatalog(uint64(l))
+	n += 2
 	if len(m.Data) > 0 {
 		for _, e := range m.Data {
 			l = e.Size()
@@ -394,24 +519,14 @@ func (m *ChartSection) Size() (n int) {
 	var l int
 	_ = l
 	l = len(m.Name)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Longname)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Collectionname)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
 	l = len(m.Description)
-	if l > 0 {
-		n += 1 + l + sovCatalog(uint64(l))
-	}
-	if m.Level != 0 {
-		n += 1 + sovCatalog(uint64(m.Level))
-	}
+	n += 1 + l + sovCatalog(uint64(l))
+	n += 1 + sovCatalog(uint64(m.Level))
 	if len(m.Subsections) > 0 {
 		for _, e := range m.Subsections {
 			l = e.Size()
@@ -440,7 +555,87 @@ func sovCatalog(x uint64) (n int) {
 func sozCatalog(x uint64) (n int) {
 	return sovCatalog(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
+func (m *Organization) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowCatalog
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: Organization: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: Organization: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Taxonomy", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCatalog
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthCatalog
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Taxonomy = append(m.Taxonomy, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipCatalog(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthCatalog
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func (m *ChartMetric) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -498,6 +693,7 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 			}
 			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Help", wireType)
@@ -527,6 +723,7 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 			}
 			m.Help = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field AxisLabel", wireType)
@@ -556,6 +753,7 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 			}
 			m.AxisLabel = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000004)
 		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field PreferredUnits", wireType)
@@ -575,6 +773,26 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+			hasFields[0] |= uint64(0x00000008)
+		case 5:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MetricType", wireType)
+			}
+			m.MetricType = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowCatalog
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MetricType |= (io_prometheus_client.MetricType(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipCatalog(dAtA[iNdEx:])
@@ -590,6 +808,18 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 			iNdEx += skippy
 		}
 	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return proto.NewRequiredNotSetError("name")
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return proto.NewRequiredNotSetError("help")
+	}
+	if hasFields[0]&uint64(0x00000004) == 0 {
+		return proto.NewRequiredNotSetError("axisLabel")
+	}
+	if hasFields[0]&uint64(0x00000008) == 0 {
+		return proto.NewRequiredNotSetError("preferredUnits")
+	}
 
 	if iNdEx > l {
 		return io.ErrUnexpectedEOF
@@ -597,6 +827,7 @@ func (m *ChartMetric) Unmarshal(dAtA []byte) error {
 	return nil
 }
 func (m *IndividualChart) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -654,6 +885,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			}
 			m.Title = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Longname", wireType)
@@ -683,6 +915,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			}
 			m.Longname = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Collectionname", wireType)
@@ -712,11 +945,12 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			}
 			m.Collectionname = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000004)
 		case 4:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Downsampler", wireType)
 			}
-			var stringLen uint64
+			var v cockroach_ts_tspb.TimeSeriesQueryAggregator
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowCatalog
@@ -726,26 +960,18 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				v |= (cockroach_ts_tspb.TimeSeriesQueryAggregator(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthCatalog
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Downsampler = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
+			m.Downsampler = &v
+			hasFields[0] |= uint64(0x00000008)
 		case 5:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Aggregator", wireType)
 			}
-			var stringLen uint64
+			var v cockroach_ts_tspb.TimeSeriesQueryAggregator
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowCatalog
@@ -755,26 +981,18 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				v |= (cockroach_ts_tspb.TimeSeriesQueryAggregator(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthCatalog
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Aggregator = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
+			m.Aggregator = &v
+			hasFields[0] |= uint64(0x00000010)
 		case 6:
-			if wireType != 2 {
+			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Derivative", wireType)
 			}
-			var stringLen uint64
+			var v cockroach_ts_tspb.TimeSeriesQueryDerivative
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowCatalog
@@ -784,21 +1002,13 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
+				v |= (cockroach_ts_tspb.TimeSeriesQueryDerivative(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthCatalog
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Derivative = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
+			m.Derivative = &v
+			hasFields[0] |= uint64(0x00000020)
 		case 7:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Units", wireType)
@@ -818,6 +1028,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+			hasFields[0] |= uint64(0x00000040)
 		case 8:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field AxisLabel", wireType)
@@ -847,6 +1058,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			}
 			m.AxisLabel = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000080)
 		case 9:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Percentiles", wireType)
@@ -867,6 +1079,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 				}
 			}
 			m.Percentiles = bool(v != 0)
+			hasFields[0] |= uint64(0x00000100)
 		case 10:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Data", wireType)
@@ -893,7 +1106,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Data = append(m.Data, &ChartMetric{})
+			m.Data = append(m.Data, ChartMetric{})
 			if err := m.Data[len(m.Data)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -913,6 +1126,33 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			iNdEx += skippy
 		}
 	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return proto.NewRequiredNotSetError("title")
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return proto.NewRequiredNotSetError("longname")
+	}
+	if hasFields[0]&uint64(0x00000004) == 0 {
+		return proto.NewRequiredNotSetError("collectionname")
+	}
+	if hasFields[0]&uint64(0x00000008) == 0 {
+		return proto.NewRequiredNotSetError("downsampler")
+	}
+	if hasFields[0]&uint64(0x00000010) == 0 {
+		return proto.NewRequiredNotSetError("aggregator")
+	}
+	if hasFields[0]&uint64(0x00000020) == 0 {
+		return proto.NewRequiredNotSetError("derivative")
+	}
+	if hasFields[0]&uint64(0x00000040) == 0 {
+		return proto.NewRequiredNotSetError("units")
+	}
+	if hasFields[0]&uint64(0x00000080) == 0 {
+		return proto.NewRequiredNotSetError("axisLabel")
+	}
+	if hasFields[0]&uint64(0x00000100) == 0 {
+		return proto.NewRequiredNotSetError("percentiles")
+	}
 
 	if iNdEx > l {
 		return io.ErrUnexpectedEOF
@@ -920,6 +1160,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 	return nil
 }
 func (m *ChartSection) Unmarshal(dAtA []byte) error {
+	var hasFields [1]uint64
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -977,6 +1218,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			}
 			m.Name = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Longname", wireType)
@@ -1006,6 +1248,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			}
 			m.Longname = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Collectionname", wireType)
@@ -1035,6 +1278,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			}
 			m.Collectionname = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000004)
 		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Description", wireType)
@@ -1064,6 +1308,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			}
 			m.Description = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
+			hasFields[0] |= uint64(0x00000008)
 		case 5:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Level", wireType)
@@ -1083,6 +1328,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+			hasFields[0] |= uint64(0x00000010)
 		case 6:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Subsections", wireType)
@@ -1159,6 +1405,21 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			}
 			iNdEx += skippy
 		}
+	}
+	if hasFields[0]&uint64(0x00000001) == 0 {
+		return proto.NewRequiredNotSetError("name")
+	}
+	if hasFields[0]&uint64(0x00000002) == 0 {
+		return proto.NewRequiredNotSetError("longname")
+	}
+	if hasFields[0]&uint64(0x00000004) == 0 {
+		return proto.NewRequiredNotSetError("collectionname")
+	}
+	if hasFields[0]&uint64(0x00000008) == 0 {
+		return proto.NewRequiredNotSetError("description")
+	}
+	if hasFields[0]&uint64(0x00000010) == 0 {
+		return proto.NewRequiredNotSetError("level")
 	}
 
 	if iNdEx > l {
@@ -1274,37 +1535,52 @@ var (
 func init() { proto.RegisterFile("server/catalog/catalog.proto", fileDescriptorCatalog) }
 
 var fileDescriptorCatalog = []byte{
-	// 503 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x53, 0xcf, 0x6e, 0x13, 0x3f,
-	0x10, 0xce, 0xe6, 0x5f, 0xb3, 0x93, 0x2a, 0xbf, 0xc8, 0xea, 0xc1, 0xaa, 0xaa, 0xd5, 0xfe, 0x82,
-	0xa8, 0x02, 0x87, 0x54, 0x2a, 0xa7, 0x72, 0x6b, 0xcb, 0x01, 0x04, 0x5c, 0x16, 0xf5, 0xc2, 0xcd,
-	0xf1, 0x0e, 0x1b, 0x0b, 0x77, 0xbd, 0xb2, 0x9d, 0x50, 0xce, 0xbc, 0x00, 0x8f, 0xc0, 0x9d, 0x17,
-	0xe9, 0x91, 0x23, 0x47, 0x08, 0x2f, 0x82, 0x6c, 0xa7, 0xc9, 0x12, 0x11, 0xc1, 0x81, 0xd3, 0x8e,
-	0xbf, 0xf9, 0xc6, 0xfe, 0xe6, 0x9b, 0x59, 0x38, 0x32, 0xa8, 0x17, 0xa8, 0x4f, 0x38, 0xb3, 0x4c,
-	0xaa, 0xe2, 0xee, 0x3b, 0xa9, 0xb4, 0xb2, 0x8a, 0x50, 0xae, 0xf8, 0x5b, 0xad, 0x18, 0x9f, 0x4d,
-	0x02, 0x6f, 0xb2, 0xca, 0x1f, 0x1e, 0x14, 0xaa, 0x50, 0x9e, 0x74, 0xe2, 0xa2, 0xc0, 0x1f, 0x7d,
-	0x8a, 0xa0, 0x7f, 0x39, 0x63, 0xda, 0xbe, 0x44, 0xab, 0x05, 0x27, 0x04, 0xda, 0x25, 0xbb, 0x46,
-	0x1a, 0xa5, 0xd1, 0x38, 0xce, 0x7c, 0xec, 0xb0, 0x19, 0xca, 0x8a, 0x36, 0x03, 0xe6, 0x62, 0x72,
-	0x04, 0x31, 0xbb, 0x11, 0xe6, 0x05, 0x9b, 0xa2, 0xa4, 0x2d, 0x9f, 0xd8, 0x00, 0xe4, 0x39, 0x0c,
-	0x2a, 0x8d, 0x6f, 0x50, 0x6b, 0xcc, 0xaf, 0x4a, 0x61, 0x0d, 0x6d, 0xa7, 0xd1, 0x78, 0x70, 0x7a,
-	0x6f, 0xb2, 0x4b, 0xde, 0xe4, 0xfc, 0x46, 0x18, 0x4f, 0xcd, 0xb6, 0x4a, 0x47, 0x1f, 0x5a, 0xf0,
-	0xdf, 0xb3, 0x32, 0x17, 0x0b, 0x91, 0xcf, 0x99, 0xf4, 0x62, 0xc9, 0x01, 0x74, 0xac, 0xb0, 0xf2,
-	0x4e, 0x67, 0x38, 0x90, 0x43, 0xe8, 0x49, 0x55, 0x16, 0xbe, 0x81, 0x20, 0x76, 0x7d, 0x26, 0xc7,
-	0x30, 0xe0, 0x4a, 0x4a, 0xe4, 0x56, 0xa8, 0xd2, 0x33, 0x82, 0xea, 0x2d, 0x94, 0xa4, 0xd0, 0xcf,
-	0xd5, 0xbb, 0xd2, 0xb0, 0xeb, 0x4a, 0xa2, 0xf6, 0xba, 0xe3, 0xac, 0x0e, 0x91, 0x04, 0x80, 0x15,
-	0x85, 0xc6, 0x82, 0x59, 0xa5, 0x69, 0xc7, 0x13, 0x6a, 0x88, 0xcb, 0xe7, 0xa8, 0xc5, 0x82, 0x59,
-	0xb1, 0x40, 0xda, 0x0d, 0xf9, 0x0d, 0x42, 0xce, 0xa0, 0x33, 0xf7, 0x9e, 0xec, 0xfd, 0xbd, 0x27,
-	0xa1, 0xe2, 0x57, 0xd7, 0x7b, 0xdb, 0xae, 0xa7, 0xd0, 0xaf, 0x50, 0x73, 0x2c, 0xad, 0x90, 0x68,
-	0x68, 0x9c, 0x46, 0xe3, 0x5e, 0x56, 0x87, 0xc8, 0x19, 0xb4, 0x73, 0x66, 0x19, 0x85, 0xb4, 0x35,
-	0xee, 0x9f, 0xde, 0xdf, 0xfd, 0x72, 0x6d, 0x25, 0x32, 0x5f, 0x32, 0xfa, 0xdc, 0x84, 0x7d, 0x8f,
-	0xbe, 0x0a, 0x66, 0xfd, 0x76, 0x53, 0xfe, 0xd5, 0x00, 0xd0, 0x70, 0x2d, 0x2a, 0x07, 0xad, 0x07,
-	0xb0, 0x81, 0xdc, 0xf0, 0x25, 0x2e, 0x50, 0x7a, 0xef, 0x3b, 0x59, 0x38, 0x90, 0xa7, 0xd0, 0x37,
-	0xf3, 0xa9, 0x09, 0x37, 0x19, 0xda, 0xf5, 0x2d, 0x1e, 0xff, 0xa1, 0xc5, 0x55, 0x33, 0x59, 0xbd,
-	0x94, 0x9c, 0x43, 0x97, 0xbb, 0xa4, 0x9b, 0x90, 0xbb, 0xe4, 0xc1, 0xee, 0x4b, 0xb6, 0xf6, 0x32,
-	0x5b, 0x15, 0x3e, 0x7c, 0x0c, 0xf1, 0x7a, 0x78, 0x24, 0x86, 0xce, 0x55, 0x69, 0xd0, 0x0e, 0x1b,
-	0x2e, 0xbc, 0x54, 0xf3, 0xd2, 0x0e, 0x23, 0x17, 0x5e, 0xbc, 0xb7, 0x68, 0x86, 0x4d, 0xb2, 0x0f,
-	0xbd, 0x27, 0x73, 0xcd, 0xdc, 0xeb, 0xc3, 0xd6, 0xc5, 0xff, 0xb7, 0xdf, 0x93, 0xc6, 0xed, 0x32,
-	0x89, 0xbe, 0x2c, 0x93, 0xe8, 0xeb, 0x32, 0x89, 0xbe, 0x2d, 0x93, 0xe8, 0xe3, 0x8f, 0xa4, 0xf1,
-	0x7a, 0x6f, 0xf5, 0xec, 0xb4, 0xeb, 0x7f, 0xde, 0x47, 0x3f, 0x03, 0x00, 0x00, 0xff, 0xff, 0x17,
-	0x54, 0x67, 0x35, 0x0c, 0x04, 0x00, 0x00,
+	// 747 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x53, 0xdd, 0x6e, 0xe3, 0x44,
+	0x18, 0x8d, 0x9d, 0xa4, 0x4d, 0xbe, 0x54, 0xc1, 0x1a, 0x21, 0x61, 0x15, 0x14, 0x42, 0xd0, 0x56,
+	0xa1, 0x5a, 0x39, 0x52, 0x2f, 0xb9, 0x59, 0xa5, 0x9b, 0xec, 0x12, 0x69, 0xeb, 0x68, 0x13, 0xa7,
+	0x62, 0xb9, 0xa9, 0xa6, 0xf6, 0x87, 0x3b, 0xc2, 0xf6, 0x58, 0x33, 0x93, 0xd0, 0x72, 0xc5, 0x23,
+	0xf0, 0x36, 0xbc, 0x42, 0xb9, 0xe3, 0x92, 0x2b, 0x04, 0xe5, 0x45, 0xd0, 0x8c, 0xdd, 0xc4, 0x5b,
+	0x51, 0xfe, 0xb4, 0x57, 0xf9, 0x72, 0xce, 0x77, 0x8e, 0x3c, 0x67, 0xce, 0xc0, 0x47, 0x12, 0xc5,
+	0x06, 0xc5, 0x28, 0xa4, 0x8a, 0x26, 0x3c, 0xbe, 0xff, 0xf5, 0x72, 0xc1, 0x15, 0x27, 0x6e, 0xc8,
+	0xc3, 0x6f, 0x04, 0xa7, 0xe1, 0x95, 0x57, 0xec, 0x79, 0x25, 0x7f, 0xe8, 0x2a, 0x39, 0x52, 0x32,
+	0xbf, 0x1c, 0x29, 0x96, 0xa2, 0x44, 0xc1, 0x50, 0x16, 0x9a, 0xc3, 0xf7, 0x63, 0x1e, 0x73, 0x33,
+	0x8e, 0xf4, 0x54, 0xa2, 0x4f, 0x72, 0xc1, 0x53, 0x54, 0x57, 0xb8, 0x96, 0xa3, 0x30, 0x61, 0x98,
+	0xa9, 0x8b, 0x94, 0x47, 0x98, 0x8c, 0x52, 0x54, 0x82, 0x85, 0xa5, 0x78, 0x70, 0x0c, 0x07, 0x73,
+	0x11, 0xd3, 0x8c, 0x7d, 0x47, 0x15, 0xe3, 0x19, 0x39, 0x84, 0x56, 0x40, 0xaf, 0x79, 0xc6, 0xd3,
+	0x1b, 0xd7, 0xea, 0xd7, 0x87, 0xed, 0xc5, 0xf6, 0xff, 0xe0, 0x7b, 0x1b, 0x3a, 0xcf, 0xaf, 0xa8,
+	0x50, 0x67, 0xc6, 0x82, 0xb8, 0xd0, 0xc8, 0x68, 0x8a, 0xae, 0xd5, 0xb7, 0x87, 0xed, 0xd3, 0xc6,
+	0xed, 0xaf, 0x1f, 0xd7, 0x16, 0x06, 0xd1, 0xcc, 0x15, 0x26, 0xb9, 0x6b, 0x57, 0x19, 0x8d, 0x90,
+	0x01, 0xb4, 0xe9, 0x35, 0x93, 0xaf, 0xe8, 0x25, 0x26, 0x6e, 0xbd, 0x42, 0xef, 0x60, 0xf2, 0x1a,
+	0xba, 0xb9, 0xc0, 0xaf, 0x51, 0x08, 0x8c, 0x56, 0x19, 0x53, 0xd2, 0x6d, 0xf4, 0xed, 0x61, 0xf7,
+	0xe4, 0x53, 0xef, 0xb1, 0x74, 0xbc, 0xf1, 0x35, 0x93, 0x66, 0xb5, 0x74, 0x7b, 0x60, 0x40, 0x5e,
+	0x00, 0x14, 0xe7, 0x0e, 0x6e, 0x72, 0x74, 0x9b, 0x7d, 0x6b, 0xd8, 0x3d, 0xe9, 0x7b, 0xcc, 0x84,
+	0x55, 0xa6, 0xe4, 0x15, 0x29, 0x79, 0x67, 0xdb, 0xbd, 0xd2, 0xab, 0xa2, 0x1c, 0xfc, 0xd8, 0x80,
+	0xf7, 0x66, 0x59, 0xc4, 0x36, 0x2c, 0x5a, 0xd3, 0xc4, 0x84, 0x41, 0x0e, 0xa1, 0xa9, 0x98, 0x4a,
+	0xde, 0xce, 0xa1, 0x80, 0x48, 0x1f, 0x5a, 0x09, 0xcf, 0x62, 0x13, 0x53, 0x35, 0x8c, 0x2d, 0x4a,
+	0x9e, 0x42, 0x37, 0xe4, 0x49, 0x82, 0xa1, 0x8e, 0xdf, 0xec, 0x55, 0x53, 0x79, 0xc0, 0x11, 0x1f,
+	0x3a, 0x11, 0xff, 0x36, 0x93, 0x34, 0xcd, 0x13, 0x14, 0x65, 0x2e, 0x4f, 0x2b, 0xb9, 0x28, 0xe9,
+	0xe9, 0x96, 0x78, 0x01, 0x4b, 0x71, 0x69, 0x5a, 0xf2, 0x7a, 0x8d, 0xe2, 0x66, 0x1c, 0xc7, 0x02,
+	0x63, 0xaa, 0xb8, 0x58, 0x54, 0x0d, 0xc8, 0x2b, 0x00, 0xba, 0xa5, 0xdc, 0xe6, 0xff, 0xb0, 0xab,
+	0xe8, 0xb5, 0x5b, 0x84, 0x82, 0x6d, 0xa8, 0x62, 0x1b, 0x74, 0xf7, 0xfe, 0xad, 0xdb, 0x64, 0xab,
+	0x59, 0x54, 0xf4, 0xe4, 0x19, 0x34, 0xd7, 0xe6, 0xf6, 0xf7, 0xff, 0xeb, 0xed, 0x17, 0xba, 0xb7,
+	0xbb, 0xd6, 0xfa, 0xeb, 0xae, 0x1d, 0x41, 0x27, 0x47, 0x11, 0x62, 0xa6, 0x58, 0x82, 0xd2, 0x6d,
+	0xf7, 0xed, 0x61, 0xab, 0xdc, 0xaa, 0x12, 0xe4, 0x19, 0x34, 0x22, 0xaa, 0xa8, 0x0b, 0xfd, 0xfa,
+	0xb0, 0x73, 0xf2, 0xe4, 0xf1, 0x6f, 0xa9, 0x3c, 0x90, 0xfb, 0xe2, 0x6b, 0xe1, 0xe0, 0x27, 0x1b,
+	0x0e, 0x0c, 0xb7, 0x2c, 0xae, 0xf3, 0x6f, 0x5e, 0xcf, 0xbb, 0x2e, 0xcd, 0x11, 0x74, 0x22, 0x94,
+	0xa1, 0x60, 0xb9, 0x86, 0x4c, 0x69, 0xee, 0x57, 0xab, 0x84, 0x2e, 0x72, 0x82, 0x1b, 0x4c, 0x4c,
+	0x0f, 0x9a, 0xf7, 0x59, 0x1a, 0x88, 0x7c, 0x01, 0x1d, 0xb9, 0xbe, 0x94, 0x85, 0xab, 0x74, 0xf7,
+	0x4c, 0x0c, 0x47, 0xff, 0x10, 0x43, 0x79, 0xd4, 0x45, 0x55, 0x4a, 0xc6, 0xb0, 0x17, 0x6a, 0x52,
+	0xdf, 0xab, 0x36, 0xf9, 0xec, 0x71, 0x93, 0x07, 0x2f, 0x6d, 0x51, 0x0a, 0x8f, 0x3f, 0x87, 0xf6,
+	0xf6, 0xca, 0x49, 0x1b, 0x9a, 0x2b, 0x7f, 0x39, 0x0d, 0x9c, 0x9a, 0x1e, 0x9f, 0xcf, 0x57, 0x7e,
+	0xe0, 0x58, 0x7a, 0x3c, 0x7d, 0x13, 0x4c, 0x97, 0x8e, 0x4d, 0x0e, 0xa0, 0x35, 0x59, 0x2d, 0xc6,
+	0xc1, 0x6c, 0xee, 0x3b, 0xf5, 0xe3, 0x17, 0x40, 0x26, 0xe6, 0xcc, 0x97, 0xb8, 0x6b, 0xb1, 0xde,
+	0x59, 0x65, 0x12, 0xd5, 0x38, 0x8e, 0x9d, 0x1a, 0xd9, 0x87, 0xfa, 0xf8, 0xfc, 0xa5, 0x63, 0xe9,
+	0x61, 0xb9, 0x3a, 0x73, 0x6c, 0x3d, 0x9c, 0x8d, 0xbf, 0x74, 0xea, 0x66, 0x98, 0xf9, 0x4e, 0xe3,
+	0xf8, 0xcd, 0xce, 0x67, 0xd7, 0xdf, 0xad, 0xcf, 0x04, 0x85, 0x53, 0x23, 0x2d, 0x68, 0xf8, 0x73,
+	0x7f, 0xea, 0x58, 0xa4, 0x0b, 0x30, 0x99, 0x2e, 0x66, 0xe7, 0xe3, 0x60, 0x76, 0x3e, 0x75, 0x6c,
+	0xf2, 0x21, 0x7c, 0xe0, 0xcf, 0xfd, 0x0b, 0x7f, 0xfa, 0xd2, 0x20, 0x17, 0x15, 0xb2, 0x7e, 0xfa,
+	0xc9, 0xed, 0xef, 0xbd, 0xda, 0xed, 0x5d, 0xcf, 0xfa, 0xf9, 0xae, 0x67, 0xfd, 0x72, 0xd7, 0xb3,
+	0x7e, 0xbb, 0xeb, 0x59, 0x3f, 0xfc, 0xd1, 0xab, 0x7d, 0xb5, 0x5f, 0x26, 0xf3, 0x67, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0x8f, 0xbe, 0x65, 0xc5, 0x46, 0x06, 0x00, 0x00,
 }
