@@ -6,7 +6,14 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputeByteScale, ComputeDurationScale, DurationNS, timeSIUnits, DurationSec } from "src/util/format";
+import { Bytes,
+  ComputeByteScale,
+  ComputeDurationScale,
+  DurationNS,
+  DurationSec,
+  timeSIUnits,
+  TimestampNS,
+  TimestampSec } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -182,6 +189,27 @@ function ComputeDurationAxisDomain(extent: Extent, timeUnit: timeSIUnits): AxisD
   return axisDomain;
 }
 
+function ComputeTimestampAxisDomain(extent: Extent, timeUnit: timeSIUnits): AxisDomain {
+  const scale = ComputeDurationScale(extent[1], timeUnit);
+  const prefixFactor = scale.value;
+
+  const axisDomain = computeAxisDomain(extent, prefixFactor);
+
+  axisDomain.label = "ISO Timestamp";
+
+  switch (timeUnit) {
+    case timeSIUnits.NS:
+      axisDomain.guideFormat = TimestampNS;
+      break;
+    case timeSIUnits.Sec:
+      axisDomain.guideFormat = TimestampSec;
+      break;
+    default:
+      axisDomain.guideFormat = TimestampSec;
+  }
+  return axisDomain;
+}
+
 const timeIncrementDurations = [
   moment.duration(1, "m"),
   moment.duration(5, "m"),
@@ -248,6 +276,10 @@ function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomai
       return ComputeDurationAxisDomain(yExtent, timeSIUnits.NS);
     case AxisUnits.Duration_Sec:
       return ComputeDurationAxisDomain(yExtent, timeSIUnits.Sec);
+    case AxisUnits.Timestamp_NS:
+      return ComputeTimestampAxisDomain(yExtent, timeSIUnits.NS);
+    case AxisUnits.Timestamp_Sec:
+      return ComputeTimestampAxisDomain(yExtent, timeSIUnits.Sec);
     default:
       return ComputeCountAxisDomain(yExtent);
   }

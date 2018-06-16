@@ -86,7 +86,6 @@ export function ComputeDurationScale(time: number, timeUnit: timeSIUnits): UnitV
 
   if (timeUnit === timeSIUnits.NS) {
     scale = ComputePrefixExponent(time, 1000, durationUnits);
-    console.log("scale", scale);
     return {
       value: Math.pow(1000, scale),
       units: durationUnits[scale],
@@ -115,4 +114,43 @@ export function DurationNS(nanoseconds: number): string {
  */
 export function DurationSec(seconds: number): string {
   return seconds + " s";
+}
+
+/**
+ * ComputeDurationScale calculates an appropriate scale factor and unit to use
+ * to display a given duration value, without actually converting the value.
+ */
+export function ComputeTimestampScale(timestamp: number, timeUnit: timeSIUnits): UnitValue {
+  let scale;
+
+  if (timeUnit === timeSIUnits.NS) {
+    scale = ComputePrefixExponent(timestamp, 1000, durationUnits);
+    return {
+      value: Math.pow(1000, scale),
+      units: durationUnits[scale],
+   };
+  } else {
+    return {
+      value: 1,
+      units: durationUnits[3],
+    };
+  }
+}
+
+/**
+ * DurationNS creates a string representation for a duration expressed in
+ * nanoseconds; values are converted into larger units up to seconds.
+ */
+export function TimestampNS(nanoseconds: number): string {
+  const date = new Date(nanoseconds / 1e6);
+  return date.toISOString();
+}
+
+/**
+ * DurationNS creates a string representation for a duration expressed in
+ * seconds.
+ */
+export function TimestampSec(seconds: number): string {
+  const date = new Date(seconds * 1000);
+  return date.toISOString();
 }

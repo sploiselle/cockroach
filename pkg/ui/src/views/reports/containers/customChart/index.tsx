@@ -25,6 +25,8 @@ const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Bytes,
   AxisUnits.Duration_NS,
   AxisUnits.Duration_Sec,
+  AxisUnits.Timestamp_NS,
+  AxisUnits.Timestamp_Sec,
 ].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
 export interface CustomChartProps {
