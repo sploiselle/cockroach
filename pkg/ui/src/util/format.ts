@@ -72,7 +72,7 @@ export function Percentage(numerator: number, denominator: number): string {
   return Math.floor(numerator / denominator * 100).toString() + "%";
 }
 
-export enum timeSIUnit {
+export enum timeSIUnits {
   NS,
   Sec,
 }
@@ -81,12 +81,10 @@ export enum timeSIUnit {
  * ComputeDurationScale calculates an appropriate scale factor and unit to use
  * to display a given duration value, without actually converting the value.
  */
-export function ComputeDurationScale(time: number, siUnit: timeSIUnit): UnitValue {
+export function ComputeDurationScale(time: number, timeUnit: timeSIUnits): UnitValue {
   let scale;
 
-  console.log("timeSIUnit", siUnit);
-
-  if (siUnit === timeSIUnit.NS) {
+  if (timeUnit === timeSIUnits.NS) {
     scale = ComputePrefixExponent(time, 1000, durationUnits);
     console.log("scale", scale);
     return {
@@ -102,18 +100,19 @@ export function ComputeDurationScale(time: number, siUnit: timeSIUnit): UnitValu
 }
 
 /**
- * DurationNS creates a string representation for a duration. The expectation is
- * that units are passed in nanoseconds; for larger durations, the value will
- * be converted into larger units.
+ * DurationNS creates a string representation for a duration expressed in
+ * nanoseconds; values are converted into larger units up to seconds.
  */
 export function DurationNS(nanoseconds: number): string {
-  const scale = ComputeDurationScale(nanoseconds, timeSIUnit.NS);
+  const scale = ComputeDurationScale(nanoseconds, timeSIUnits.NS);
   const unitVal = nanoseconds / scale.value;
   return unitVal.toFixed(1) + " " + scale.units;
 }
 
+/**
+ * DurationNS creates a string representation for a duration expressed in
+ * seconds.
+ */
 export function DurationSec(seconds: number): string {
-  // const scale = ComputeDurationScale(seconds, timeSIUnit.Sec);
-  // const unitVal = seconds / scale.value;
   return seconds + " s";
 }

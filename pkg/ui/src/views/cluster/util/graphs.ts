@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputeByteScale, ComputeDurationScale, DurationNS, timeSIUnit, DurationSec } from "src/util/format";
+import { Bytes, ComputeByteScale, ComputeDurationScale, DurationNS, timeSIUnits, DurationSec } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -161,7 +161,7 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-function ComputeDurationAxisDomain(extent: Extent, timeUnit: timeSIUnit): AxisDomain {
+function ComputeDurationAxisDomain(extent: Extent, timeUnit: timeSIUnits): AxisDomain {
   const scale = ComputeDurationScale(extent[1], timeUnit);
   const prefixFactor = scale.value;
 
@@ -170,10 +170,10 @@ function ComputeDurationAxisDomain(extent: Extent, timeUnit: timeSIUnit): AxisDo
   axisDomain.label = scale.units;
 
   switch (timeUnit) {
-    case timeSIUnit.NS:
+    case timeSIUnits.NS:
       axisDomain.guideFormat = DurationNS;
       break;
-    case timeSIUnit.Sec:
+    case timeSIUnits.Sec:
       axisDomain.guideFormat = DurationSec;
       break;
     default:
@@ -245,9 +245,9 @@ function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomai
     case AxisUnits.Bytes:
       return ComputeByteAxisDomain(yExtent);
     case AxisUnits.Duration_NS:
-      return ComputeDurationAxisDomain(yExtent, timeSIUnit.NS);
+      return ComputeDurationAxisDomain(yExtent, timeSIUnits.NS);
     case AxisUnits.Duration_Sec:
-      return ComputeDurationAxisDomain(yExtent, timeSIUnit.Sec);
+      return ComputeDurationAxisDomain(yExtent, timeSIUnits.Sec);
     default:
       return ComputeCountAxisDomain(yExtent);
   }
