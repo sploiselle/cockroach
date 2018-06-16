@@ -42,7 +42,19 @@ export enum AxisUnits {
   /**
    * Units are durations expressed in nanoseconds.
    */
-  Duration,
+  Duration_NS,
+  /**
+   * Units are durations expressed in nanoseconds.
+   */
+  Duration_Sec,
+  /**
+   * Timestamp_Sec are durations expressed in nanoseconds.
+   */
+  Timestamp_Sec,
+  /**
+   * Units are durations expressed in nanoseconds.
+   */
+  Timestamp_NS,
 }
 
 /**

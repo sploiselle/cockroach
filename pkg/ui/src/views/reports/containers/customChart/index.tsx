@@ -23,7 +23,8 @@ import { NodeStatus$Properties } from "../../../../util/proto";
 const axisUnitsOptions: DropdownOption[] = [
   AxisUnits.Count,
   AxisUnits.Bytes,
-  AxisUnits.Duration,
+  AxisUnits.Duration_NS,
+  AxisUnits.Duration_Sec,
 ].map(au => ({ label: AxisUnits[au], value: au.toString() }));
 
 export interface CustomChartProps {

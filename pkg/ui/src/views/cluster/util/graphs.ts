@@ -6,7 +6,7 @@ import moment from "moment";
 
 import * as protos from "src/js/protos";
 import { NanoToMilli } from "src/util/convert";
-import { Bytes, ComputeByteScale, ComputeDurationScale, Duration } from "src/util/format";
+import { Bytes, ComputeByteScale, ComputeDurationScale, DurationNS, timeSIUnit, DurationSec } from "src/util/format";
 
 import {
   MetricProps, AxisProps, AxisUnits, QueryTimeInfo,
@@ -161,15 +161,24 @@ function ComputeByteAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
-function ComputeDurationAxisDomain(extent: Extent): AxisDomain {
-  const scale = ComputeDurationScale(extent[1]);
+function ComputeDurationAxisDomain(extent: Extent, timeUnit: timeSIUnit): AxisDomain {
+  const scale = ComputeDurationScale(extent[1], timeUnit);
   const prefixFactor = scale.value;
 
   const axisDomain = computeAxisDomain(extent, prefixFactor);
 
   axisDomain.label = scale.units;
 
-  axisDomain.guideFormat = Duration;
+  switch (timeUnit) {
+    case timeSIUnit.NS:
+      axisDomain.guideFormat = DurationNS;
+      break;
+    case timeSIUnit.Sec:
+      axisDomain.guideFormat = DurationSec;
+      break;
+    default:
+      axisDomain.guideFormat = DurationNS;
+  }
   return axisDomain;
 }
 
@@ -225,6 +234,7 @@ function ComputeTimeAxisDomain(extent: Extent): AxisDomain {
   return axisDomain;
 }
 
+// WORK HERE
 function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomain {
   const resultDatapoints = _.flatMap(data.results, (result) => _.map(result.datapoints, (dp) => dp.value));
   // TODO(couchand): Remove these random datapoints when NVD3 is gone.
@@ -234,8 +244,10 @@ function calculateYAxisDomain(axisUnits: AxisUnits, data: TSResponse): AxisDomai
   switch (axisUnits) {
     case AxisUnits.Bytes:
       return ComputeByteAxisDomain(yExtent);
-    case AxisUnits.Duration:
-      return ComputeDurationAxisDomain(yExtent);
+    case AxisUnits.Duration_NS:
+      return ComputeDurationAxisDomain(yExtent, timeSIUnit.NS);
+    case AxisUnits.Duration_Sec:
+      return ComputeDurationAxisDomain(yExtent, timeSIUnit.Sec);
     default:
       return ComputeCountAxisDomain(yExtent);
   }
