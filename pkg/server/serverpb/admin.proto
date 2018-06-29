@@ -575,11 +575,7 @@ message ChartCatalogRequest {
 
 // ChartCatalogRequest requests a catalog of available charts metadata for metrics.
 message ChartCatalogResponse {
-  map<int32, string> downsampAndAggKey = 1 [(gogoproto.nullable) = false];
-  map<int32, string> derKey = 2 [(gogoproto.nullable) = false];
-  map<int32, string> unitsKey = 3 [(gogoproto.nullable) = false];
-  map<int32, string> metricTypeKey = 4 [(gogoproto.nullable) = false];
-  repeated cockroach.server.catalog.ChartSection catalog = 5 [(gogoproto.nullable) = false];
+  repeated cockroach.server.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
 // Admin is the gRPC API for the admin UI. Through grpc-gateway, we offer

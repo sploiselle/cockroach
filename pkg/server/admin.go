@@ -48,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -171,11 +170,7 @@ func (s *adminServer) ChartCatalog(
 	timeSeriesMetaData := s.server.recorder.GetMetricsMetadata()
 
 	resp := &serverpb.ChartCatalogResponse{
-		DownsampAndAggKey: tspb.TimeSeriesQueryAggregator_name,
-		DerKey:            tspb.TimeSeriesQueryDerivative_name,
-		UnitsKey:          catalog.AxisUnits_name,
-		MetricTypeKey:     prometheusgo.MetricType_name,
-		Catalog:           catalog.GenerateCatalog(timeSeriesMetaData),
+		Catalog: catalog.GenerateCatalog(timeSeriesMetaData),
 	}
 
 	return resp, nil
