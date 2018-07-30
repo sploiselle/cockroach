@@ -174,6 +174,7 @@ type Server struct {
 	authentication   *authenticationServer
 	initServer       *initServer
 	tsDB             *ts.DB
+	tsMonitor        *ts.Monitor
 	tsServer         ts.Server
 	raftTransport    *storage.RaftTransport
 	stopper          *stop.Stopper
@@ -1501,6 +1502,9 @@ func (s *Server) Start(ctx context.Context) error {
 	s.tsDB.PollSource(
 		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
+
+	s.tsMonitor = ts.NewMonitor(s.tsDB, s.recorder.GetMetricsMetadata(), s.st)
+	s.tsMonitor.Query()
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
