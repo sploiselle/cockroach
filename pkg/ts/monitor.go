@@ -23,7 +23,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 
@@ -42,6 +41,8 @@ type Monitor struct {
 func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Monitor {
 
 	bytesMonitor := mon.MakeMonitor("timeseries monitor", mon.MemoryResource, nil, nil, 0, 100*1024*1024, st)
+	bytesMonitor.Start(context.TODO(), nil, mon.MakeStandaloneBudget(100*1024*1024))
+	bytesMonitor.MakeBoundAccount()
 
 	memOpts := QueryMemoryOptions{
 		// Large budget, but not maximum to avoid overflows.
@@ -65,47 +66,59 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Mo
 func (m *Monitor) Query() {
 
 	go func() {
-		time.Sleep(61 * time.Second)
-		eKey := timeutil.Now().UnixNano()
+		// time.Sleep(time.Second * 10)
+		sKey := timeutil.Now().UnixNano() - 6.1e+10
+		eKey := timeutil.Now().UnixNano() - 1.1e+10
 		fmt.Println(eKey)
 
 		var randMetric string
 
-		for k := range m.metadata {
-			randMetric = k
-		}
+		randMetric = "cr.node.sys.uptime"
+		// for k := range m.metadata {
+		// 	randMetric = k
+		// }
 
 		tsri := timeSeriesResolutionInfo{
 			randMetric,
 			Resolution10s,
 		}
 
-		thresholds := m.db.computeThresholds(eKey)
-		threshold := thresholds[Resolution10s]
-
 		targetSpan := roachpb.Span{
-			Key: MakeDataKey(randMetric, "" /* source */, Resolution10s, 0),
+			Key: MakeDataKey(randMetric, "1" /* source */, Resolution10s, sKey),
 			EndKey: MakeDataKey(
-				randMetric, "" /* source */, Resolution10s, threshold,
+				randMetric, "1" /* source */, Resolution10s, eKey,
 			),
 		}
 
-		rollupDataMap := make(map[string]rollupData)
+		qts := QueryTimespan{sKey, eKey, timeutil.Now().UnixNano(), Resolution10s.SampleDuration()}
 
-		fmt.Println("randMetric", randMetric)
-
-		span, err := m.db.queryAndComputeRollupsForSpan(
+		res2, err := m.db.queryForSpan(
 			context.TODO(),
 			tsri,
 			targetSpan,
 			Resolution10s,
-			rollupDataMap,
 			m.mem,
 		)
 
-		fmt.Println("span", span)
-		fmt.Println("err", err)
+		if err != nil {
+			fmt.Println(err)
+		}
 
-		fmt.Println("rollupDataMap", rollupDataMap)
+		fmt.Println("res2", res2)
+
+		res1, err := m.db.rollupQuery(
+			context.TODO(),
+			tsri,
+			targetSpan,
+			Resolution10s,
+			m.mem,
+			qts,
+		)
+
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		fmt.Println("res1", res1)
 	}()
 }
