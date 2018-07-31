@@ -350,7 +350,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 
 	metrics := make(map[string]metric.Metadata)
 
-	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics)
+	mr.mu.nodeRegistry.WriteMetricsMetadata(metrics, strings.TrimSuffix(nodeTimeSeriesPrefix, "%s"))
 
 	// Get a random storeID.
 	var sID roachpb.StoreID
@@ -361,7 +361,7 @@ func (mr *MetricsRecorder) GetMetricsMetadata() map[string]metric.Metadata {
 	}
 
 	// Get metric metadata from that store because all stores have the same metadata.
-	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics)
+	mr.mu.storeRegistries[sID].WriteMetricsMetadata(metrics, strings.TrimSuffix(storeTimeSeriesPrefix, "%s"))
 
 	return metrics
 }
