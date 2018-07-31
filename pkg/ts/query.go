@@ -451,6 +451,8 @@ func (db *DB) Query(
 ) ([]tspb.TimeSeriesDatapoint, []string, error) {
 	timespan.normalize()
 
+	fmt.Println("Inside Query")
+	fmt.Println("timespan", timespan.StartNanos, timespan.EndNanos)
 	// Validate incoming parameters.
 	if err := timespan.verifyBounds(); err != nil {
 		return nil, nil, err
@@ -472,6 +474,7 @@ func (db *DB) Query(
 
 	var result []tspb.TimeSeriesDatapoint
 
+	fmt.Println("Generated result")
 	// Create sourceSet, which tracks unique sources seen while querying.
 	sourceSet := make(map[string]struct{})
 
@@ -482,6 +485,8 @@ func (db *DB) Query(
 		}
 	}
 
+	fmt.Println("Generated resolutions")
+
 	for _, resolution := range resolutions {
 		// Compute the maximum timespan width which can be queried for this resolution
 		// without exceeding the memory budget.
@@ -490,6 +495,7 @@ func (db *DB) Query(
 			return nil, nil, err
 		}
 
+		fmt.Println("maxTimespanWidth", maxTimespanWidth, "timespan.width()", timespan.width())
 		if maxTimespanWidth > timespan.width() {
 			if err := db.queryChunk(
 				ctx, query, resolution, timespan, mem, &result, sourceSet,
@@ -514,6 +520,8 @@ func (db *DB) Query(
 				}
 			}
 		}
+
+		fmt.Println("result", result)
 
 		// If results were returned and there are multiple resolutions, determine
 		// if we have satisfied the entire query. If not, determine where the query
@@ -679,6 +687,8 @@ func aggregateSpansToDatapoints(
 		iterators = append(iterators, iter)
 	}
 
+	fmt.Println("iterators", iterators)
+
 	var lowestTimestamp int64
 	computeLowest := func() {
 		lowestTimestamp = math.MaxInt64
@@ -692,8 +702,14 @@ func aggregateSpansToDatapoints(
 		}
 	}
 
+	fmt.Println("lowestTimestamp", lowestTimestamp)
+
+	fmt.Println("timespan.EndNanos", timespan.EndNanos)
+
+	fmt.Println("lowestTimestamp <= timespan.EndNanos", lowestTimestamp <= timespan.EndNanos)
 	aggregateValues := make([]float64, len(iterators))
 	for computeLowest(); lowestTimestamp <= timespan.EndNanos; computeLowest() {
+		fmt.Println("I am inside")
 		aggregateValues = aggregateValues[:0]
 		for i, iter := range iterators {
 			var value float64
@@ -722,6 +738,8 @@ func aggregateSpansToDatapoints(
 					lowestTimestamp, interpolationLimitNanos, query.GetDownsampler(),
 				)
 			}
+
+			fmt.Println("value", value)
 
 			if valid {
 				aggregateValues = append(aggregateValues, value)
@@ -843,12 +861,14 @@ func (db *DB) readFromDatabase(
 	for currentTimestamp := startTimestamp; currentTimestamp <= timespan.EndNanos; currentTimestamp += kd {
 		for _, source := range sources {
 			key := MakeDataKey(seriesName, source, diskResolution, currentTimestamp)
+			// fmt.Println("readFromDatabase key", key)
 			b.Get(key)
 		}
 	}
 	if err := db.db.Run(ctx, b); err != nil {
 		return nil, err
 	}
+	// fmt.Println("readFromDatabase", b.Results)
 	var rows []client.KeyValue
 	for _, result := range b.Results {
 		row := result.Rows[0]
@@ -878,11 +898,13 @@ func (db *DB) readAllSourcesFromDatabase(
 		seriesName, "" /* source */, diskResolution, timespan.EndNanos,
 	).PrefixEnd()
 	b := &client.Batch{}
+	// fmt.Println("readAllSourcesFromDatabase keys", startKey, endKey)
 	b.Scan(startKey, endKey)
 
 	if err := db.db.Run(ctx, b); err != nil {
 		return nil, err
 	}
+	// fmt.Println("readFromDatabase", b.Results)
 	return b.Results[0].Rows, nil
 }
 
