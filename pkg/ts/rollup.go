@@ -403,7 +403,8 @@ func (db *DB) rollupQuery(
 	targetResolution Resolution,
 	qmc QueryMemoryContext,
 	qts QueryTimespan,
-) ([]tspb.TimeSeriesDatapoint, error) {
+	counter bool,
+) (rollupData, error) {
 
 	b := &client.Batch{}
 
@@ -424,7 +425,7 @@ func (db *DB) rollupQuery(
 	}
 
 	if err := db.db.Run(ctx, b); err != nil {
-		return nil, err
+		return rollupData{}, err
 	}
 
 	// Convert result data into a map of source strings to ordered spans of
@@ -433,11 +434,25 @@ func (db *DB) rollupQuery(
 	defer diskAccount.Close(ctx)
 	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
 	if err != nil {
-		return nil, err
+		return rollupData{}, err
 	}
 
-	agg := tspb.TimeSeriesQueryAggregator_AVG
-	der := tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE
+	for source, span := range sourceSpans {
+		fmt.Println("source", source)
+		fmt.Println("span", span)
+		if span[0].StartTimestampNanos == 0 {
+			return rollupData{}, nil
+		}
+	}
+
+	agg := tspb.TimeSeriesQueryAggregator_SUM
+	var der tspb.TimeSeriesQueryDerivative
+
+	if counter {
+		der = tspb.TimeSeriesQueryDerivative_DERIVATIVE
+	} else {
+		der = tspb.TimeSeriesQueryDerivative_NONE
+	}
 
 	q := tspb.Query{
 		series.Name,
@@ -448,12 +463,63 @@ func (db *DB) rollupQuery(
 	}
 
 	res := make([]tspb.TimeSeriesDatapoint, 0)
+	fmt.Println("res", res)
 	aggregateSpansToDatapoints(sourceSpans, q, qts, series.Resolution.SampleDuration(), &res)
-
+	if len(res) == 0 {
+		return rollupData{}, nil
+	}
+	res = trimTimeseriesDatapointSlice(res, qts)
 	rollup := computeRollupsFromData(tspb.TimeSeriesData{Name: series.Name, Source: "", Datapoints: res}, qts.EndNanos-qts.StartNanos)
+	if len(rollup.datapoints) > 1 {
+		compressedRollup := compressRollupDatapoints(rollup.datapoints)
+		rollup.datapoints = []rollupDatapoint{compressedRollup}
+	}
 
 	fmt.Println(rollup)
-	return res, nil
+	return rollup, nil
+}
+
+func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
+
+	compressedDatapoint := datapoints[0]
+
+	for i := 1; i < len(datapoints); i++ {
+		compressedDatapoint.variance = computeParallelVariance(
+			parallelVarianceArgs{
+				count:    compressedDatapoint.count,
+				average:  compressedDatapoint.sum / float64(compressedDatapoint.count),
+				variance: compressedDatapoint.variance,
+			},
+			parallelVarianceArgs{
+				count:    datapoints[i].count,
+				average:  datapoints[i].sum / float64(datapoints[i].count),
+				variance: datapoints[i].variance,
+			},
+		)
+		compressedDatapoint.count += datapoints[i].count
+		compressedDatapoint.last = datapoints[i].last
+		compressedDatapoint.max = math.Max(compressedDatapoint.max, datapoints[i].max)
+		compressedDatapoint.min = math.Max(compressedDatapoint.max, datapoints[i].max)
+		compressedDatapoint.sum += datapoints[i].sum
+	}
+
+	return compressedDatapoint
+}
+
+// If you send a request for 1 minute worth of metrics it's inclusive of the final period
+// e.g. [11:00:00,11:01:00),[11:01:00,11:01:10). However, if you instead decrement the 1-minute
+// frame by one nanosecond, you instead end up with really ugly normalized timestamps.
+// This function provides the option of simply lopping off the fina
+func trimTimeseriesDatapointSlice(
+	datapoints []tspb.TimeSeriesDatapoint,
+	qts QueryTimespan,
+) []tspb.TimeSeriesDatapoint {
+	expectedLen := (qts.EndNanos - qts.StartNanos) / qts.SampleDurationNanos
+	if len(datapoints) > int(expectedLen) {
+		return datapoints[:expectedLen]
+	}
+
+	return datapoints
 }
 
 type parallelVarianceArgs struct {

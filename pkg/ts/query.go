@@ -687,8 +687,6 @@ func aggregateSpansToDatapoints(
 		iterators = append(iterators, iter)
 	}
 
-	fmt.Println("iterators", iterators)
-
 	var lowestTimestamp int64
 	computeLowest := func() {
 		lowestTimestamp = math.MaxInt64
@@ -701,15 +699,8 @@ func aggregateSpansToDatapoints(
 			}
 		}
 	}
-
-	fmt.Println("lowestTimestamp", lowestTimestamp)
-
-	fmt.Println("timespan.EndNanos", timespan.EndNanos)
-
-	fmt.Println("lowestTimestamp <= timespan.EndNanos", lowestTimestamp <= timespan.EndNanos)
 	aggregateValues := make([]float64, len(iterators))
 	for computeLowest(); lowestTimestamp <= timespan.EndNanos; computeLowest() {
-		fmt.Println("I am inside")
 		aggregateValues = aggregateValues[:0]
 		for i, iter := range iterators {
 			var value float64
@@ -738,8 +729,6 @@ func aggregateSpansToDatapoints(
 					lowestTimestamp, interpolationLimitNanos, query.GetDownsampler(),
 				)
 			}
-
-			fmt.Println("value", value)
 
 			if valid {
 				aggregateValues = append(aggregateValues, value)
