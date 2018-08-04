@@ -1504,7 +1504,7 @@ func (s *Server) Start(ctx context.Context) error {
 	)
 
 	s.tsMonitor = ts.NewMonitor(s.tsDB, s.recorder.GetMetricsMetadata(), s.st)
-	s.tsMonitor.Query()
+	s.tsMonitor.Start()
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
