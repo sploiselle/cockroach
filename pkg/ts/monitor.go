@@ -22,15 +22,17 @@ package ts
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
-
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	prometheusgo "github.com/prometheus/client_model/go"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/montanaflynn/stats"
+	prometheusgo "github.com/prometheus/client_model/go"
 )
 
 type RollupRes int
@@ -42,25 +44,31 @@ const (
 	OneD RollupRes = 3
 )
 
+type validatedData struct {
+	valid bool
+	data  rollupDatapoint
+}
+
 type Level struct {
 	res                   RollupRes
-	data                  []rollupDatapoint
+	data                  []validatedData
 	bufferLen             int
 	currentBufferPos      int
 	compressionPeriod     int // bufferLen + 1; disabled by 0
 	currentCompressionPos int
+	mostRecentTSNanos     int64
 }
 
 var OneMinuteLevel = Level{
 	res:               OneM,
-	bufferLen:         7,
-	compressionPeriod: 6,
+	bufferLen:         11,
+	compressionPeriod: 10,
 }
 
 var TenMinuteLevel = Level{
 	res:               TenM,
-	bufferLen:         11,
-	compressionPeriod: 10,
+	bufferLen:         7,
+	compressionPeriod: 6,
 }
 
 var OneHourLevel = Level{
@@ -81,9 +89,28 @@ type MetricDetails struct {
 }
 
 type Monitor struct {
-	db      *DB
-	metrics map[string]*MetricDetails
-	mem     QueryMemoryContext
+	db         *DB
+	metrics    map[string]*MetricDetails
+	mem        QueryMemoryContext
+	randMetric string
+}
+
+const (
+	OneMNanos int64 = 6e+10
+	TenMNanos int64 = 6e+11
+	OneHNanos int64 = 3.6e+12
+	OneDNanos int64 = 8.64e+13
+)
+
+var quantiles = [8]string{
+	"-max",
+	"-p99.999",
+	"-p99.99",
+	"-p99.9",
+	"-p99",
+	"-p90",
+	"-p75",
+	"-p50",
 }
 
 func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Monitor {
@@ -104,66 +131,107 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Mo
 
 	metrics := make(map[string]*MetricDetails)
 
-	for k, v := range md {
-		newMetric := MetricDetails{
-			levels:   [4]Level{OneDayLevel, TenMinuteLevel, OneHourLevel, OneDayLevel},
-			metadata: v,
-		}
+	for name, metadata := range md {
+		// Histograms are accessible only as 8 separate metrics; one for each quantile.
+		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
+			for _, quantile := range quantiles {
 
-		for i, level := range newMetric.levels {
-			newMetric.levels[i].data = make([]rollupDatapoint, level.bufferLen)
-			// fmt.Println("level.bufferLen", level.bufferLen)
-			// fmt.Println("newMetric.levels[i].data", newMetric.levels[i].data)
+				newMetric := MetricDetails{
+					levels:   [4]Level{OneMinuteLevel, TenMinuteLevel, OneHourLevel, OneDayLevel},
+					metadata: metadata,
+				}
 
+				for i, level := range newMetric.levels {
+					newMetric.levels[i].data = make([]validatedData, level.bufferLen)
+				}
+
+				metrics[metadata.TimeseriesPrefix+name+quantile] = &newMetric
+			}
+		} else {
+			newMetric := MetricDetails{
+				levels:   [4]Level{OneMinuteLevel, TenMinuteLevel, OneHourLevel, OneDayLevel},
+				metadata: metadata,
+			}
+
+			for i, level := range newMetric.levels {
+				newMetric.levels[i].data = make([]validatedData, level.bufferLen)
+
+			}
+			metrics[metadata.TimeseriesPrefix+name] = &newMetric
 		}
-		fmt.Println("v.TimeseriesPrefix + k", v.TimeseriesPrefix+k)
-		metrics[v.TimeseriesPrefix+k] = &newMetric
 	}
+
+	var randMetric string
+	// for k := range metrics {
+	// 	randMetric = k
+	// }
+	randMetric = "cr.store.rocksdb.memtable.total-size"
 
 	monitor := Monitor{
 		db,
 		metrics,
 		qmc,
+		randMetric,
 	}
 
 	return &monitor
 }
 
+func (m *Monitor) Start() {
+	fmt.Println("m.randMetric", m.randMetric)
+	go doEvery(time.Minute, m.Query)
+}
+
+func doEvery(d time.Duration, f func()) {
+	for x := range time.Tick(d) {
+		fmt.Println(x)
+		f()
+	}
+}
+
 func (m *Monitor) Query() {
-	fmt.Println(m.metrics)
+
 	go func() {
-		// time.Sleep(time.Second * 10)
-		now := timeutil.Now().UnixNano()
-		// Get nearest 1m interval in the past
-		now = now - (now % 6e+10)
+		metric := m.metrics[m.randMetric]
+		thisLevel := &metric.levels[OneM]
 
-		sKey := now - 6e+10
-		eKey := now
+		var now, sKey, eKey int64
+		if thisLevel.mostRecentTSNanos == 0 {
+			// time.Sleep(time.Second * 10)
+			now = timeutil.Now().UnixNano()
+			// Get nearest 1m interval in the past
+			now = now - (now % OneMNanos)
 
-		var randMetric string
-		isCounter := false
-		// randMetric = "cr.node.sys.uptime"
-		for k, v := range m.metrics {
-			randMetric = k
-
-			if v.metadata.MetricType == prometheusgo.MetricType_COUNTER {
-				isCounter = true
-			} else if v.metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
-				randMetric += "-p99"
-			}
+			sKey = now - OneMNanos
+			eKey = now
+		} else {
+			sKey = thisLevel.mostRecentTSNanos + OneMNanos
+			now = sKey + OneMNanos
+			eKey = now
 		}
 
-		fmt.Println(randMetric)
+		isCounter := true
+		// isCounter := m.metrics[m.randMetric].metadata.MetricType == prometheusgo.MetricType_COUNTER
+		// randMetric = "cr.node.sys.uptime"
+		// for k, v := range m.metrics {
+		// 	randMetric = k
+
+		// 	if v.metadata.MetricType {
+		// 		isCounter = true
+		// 	}
+		// }
+
+		fmt.Println("m.randMetric", m.randMetric)
 
 		tsri := timeSeriesResolutionInfo{
-			randMetric,
+			m.randMetric,
 			Resolution10s,
 		}
 
 		targetSpan := roachpb.Span{
-			Key: MakeDataKey(randMetric, "1" /* source */, Resolution10s, sKey),
+			Key: MakeDataKey(m.randMetric, "1" /* source */, Resolution10s, sKey),
 			EndKey: MakeDataKey(
-				randMetric, "1" /* source */, Resolution10s, eKey,
+				m.randMetric, "1" /* source */, Resolution10s, eKey,
 			),
 		}
 
@@ -178,19 +246,213 @@ func (m *Monitor) Query() {
 			qts,
 			isCounter,
 		)
+		var dataToAdd validatedData
 
-		if err != nil {
+		if err != nil || len(res.datapoints) < 1 {
 			fmt.Println(err)
+			dataToAdd = validatedData{
+				valid: false,
+				data:  rollupDatapoint{timestampNanos: sKey},
+			}
+		} else {
+			dataToAdd = validatedData{
+				valid: true,
+				data:  res.datapoints[0],
+			}
 		}
 
-		fmt.Println("res", res)
-
-		if len(res.datapoints) > 0 {
-			metric := m.metrics[randMetric]
-			thisLevel := &metric.levels[OneM]
-			thisLevel.data[thisLevel.currentBufferPos] = res.datapoints[0]
-			thisLevel.currentBufferPos++
-			fmt.Println(thisLevel)
-		}
+		metric.addDataToLevel(dataToAdd, OneM)
 	}()
+}
+
+func (mdt *MetricDetails) addDataToLevel(data validatedData, level RollupRes) {
+	thisLevel := &mdt.levels[level]
+	thisLevel.data[thisLevel.currentBufferPos] = data
+	// Oldest data is one to the right
+	oldestData := thisLevel.data[(thisLevel.currentBufferPos+1)%thisLevel.bufferLen]
+
+	if oldestData.valid && data.valid {
+		anovaPass05 := anova(0.05, []rollupDatapoint{data.data, oldestData.data})
+		if !anovaPass05 {
+			fmt.Printf(
+				"!!!WARNING!!! %s failed between %v and %v\nold: &v\nnew: %v\n",
+				mdt.metadata.Name,
+				time.Unix(0, oldestData.data.timestampNanos),
+				time.Unix(0, data.data.timestampNanos),
+				oldestData.data,
+				data.data,
+			)
+		}
+	} else {
+		fmt.Println("No anova")
+	}
+	thisLevel.currentCompressionPos = (thisLevel.currentCompressionPos + 1) % thisLevel.compressionPeriod
+	if thisLevel.currentCompressionPos == 0 && thisLevel.compressionPeriod != 0 {
+		mdt.compressData(thisLevel)
+	}
+	thisLevel.currentBufferPos = (thisLevel.currentBufferPos + 1) % thisLevel.bufferLen
+	thisLevel.mostRecentTSNanos = data.data.timestampNanos
+	fmt.Println("thisLevel", thisLevel)
+}
+
+func (mdt *MetricDetails) compressData(level *Level) {
+	period := level.compressionPeriod
+	var datapointsToCompress []rollupDatapoint
+
+	oldestIndex := (level.currentBufferPos + level.bufferLen - period + 1) % level.bufferLen
+	oldfestTimestamp := level.data[oldestIndex].data.timestampNanos
+
+	for i := 0; i < period; i++ {
+		indexPos := (oldestIndex + i) % level.bufferLen
+		if level.data[indexPos].valid {
+			datapointsToCompress = append(datapointsToCompress, level.data[indexPos].data)
+		}
+	}
+	var dataToAdd validatedData
+	if len(datapointsToCompress) > 0 {
+		compressedData := compressRollupDatapointsAtTimestamp(datapointsToCompress, oldfestTimestamp)
+		dataToAdd = validatedData{
+			valid: true,
+			data:  compressedData,
+		}
+	} else {
+		dataToAdd = validatedData{
+			valid: false,
+			data: rollupDatapoint{
+				timestampNanos: oldfestTimestamp,
+			},
+		}
+	}
+	newLevel := RollupRes(int(level.res) + 1)
+	mdt.addDataToLevel(dataToAdd, newLevel)
+}
+
+type anovaElement struct {
+	g    uint32
+	k    uint32
+	mean float64
+	vari float64
+	ssw  float64
+	ssb  float64
+}
+
+type anovaRow struct {
+	val float64
+	df  float64
+}
+
+type anovaVals struct {
+	sst anovaRow
+	ssw anovaRow
+	ssb anovaRow
+}
+
+func anova(fVal float32, stats []rollupDatapoint) bool {
+	fmt.Printf("anova between %v", stats[0].timestampNanos)
+	anovaElements := make([]anovaElement, len(stats))
+
+	for i, stat := range stats {
+		if i > 0 {
+			fmt.Printf(" and %v\n", stat.timestampNanos)
+		}
+		anovaElements[i] = anovaElement{
+			g:    1,
+			k:    stat.count,
+			mean: stat.sum / float64(stat.count),
+			vari: stat.variance,
+			ssw:  stat.variance * float64(stat.count-1),
+			ssb:  0,
+		}
+	}
+
+	ssStats := calculateSuperSet(anovaElements)
+
+	sst := anovaRow{
+		ssStats.vari * float64(ssStats.g*ssStats.k-1),
+		float64(ssStats.g*ssStats.k - 1),
+	}
+
+	ssw := anovaRow{
+		ssStats.ssw,
+		float64(ssStats.g * (ssStats.k - 1)),
+	}
+
+	ssb := anovaRow{
+		sst.val - ssw.val,
+		float64(ssStats.g - 1),
+	}
+
+	msw := (ssw.val / ssw.df)
+	fResult := (ssb.val / ssb.df) / msw
+
+	if fVal == 0.05 {
+		an05row, ok := F05[int(ssw.df)]
+		if !ok {
+			log.Fatal("too many measurements, my guy")
+		}
+
+		an05val := an05row[int(ssb.df)-1]
+
+		if fResult > an05val {
+			return false
+			// return tukey(pt, 0.05, msw, int(ssw.df), int(ssb.df), ns)
+		}
+	} else {
+		an01row, ok := F01[int(ssw.df)]
+		if !ok {
+			log.Fatal("too many measurements, my guy")
+		}
+
+		an01val := an01row[int(ssb.df)-1]
+
+		if fResult > an01val {
+			return false
+			// return tukey(pt, 0.01, msw, int(ssw.df), int(ssb.df), ns)
+		}
+	}
+
+	return true
+}
+
+func calculateSuperSet(ae []anovaElement) anovaElement {
+	k := ae[0].k
+	kFloat := float64(k)
+	g := len(ae)
+	gFloat := float64(g)
+
+	allMeans := make([]float64, g)
+
+	var totalSum float64
+	var totalCount uint32
+
+	for i := 0; i < g; i++ {
+		totalSum += (ae[i].mean * float64(ae[i].k))
+		totalCount += ae[i].k
+		allMeans[i] = ae[i].mean
+	}
+	ssMean := totalSum / float64(totalCount)
+
+	var sumVar, ssSSW, ssSSB float64
+
+	for _, v := range ae {
+		v.ssb = kFloat * math.Pow(v.mean-ssMean, 2)
+		sumVar += v.vari
+		ssSSW += v.ssw
+		ssSSB += v.ssb
+	}
+
+	varMean, _ := stats.PopulationVariance(allMeans)
+
+	ssVar := ((kFloat - 1) / (gFloat*kFloat - 1)) * (sumVar + varMean*(kFloat*(gFloat-1)/(kFloat-1)))
+
+	ssStats := anovaElement{
+		g:    uint32(g),
+		k:    k,
+		mean: ssMean,
+		vari: ssVar,
+		ssw:  ssSSW,
+		ssb:  ssSSB,
+	}
+
+	return ssStats
 }

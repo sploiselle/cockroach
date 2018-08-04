@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/pkg/errors"
 )
 
 type rollupDatapoint struct {
@@ -394,6 +395,8 @@ func (db *DB) queryForSpan(
 	return rollupDataMap, nil
 }
 
+var ErrNoData = fmt.Errorf("%s has no data between %s and %s")
+
 // queryAndComputeRollupsForSpan2 queries time series data from the provided
 // span, up to a maximum limit of rows based on memory limits.
 func (db *DB) rollupQuery(
@@ -437,11 +440,14 @@ func (db *DB) rollupQuery(
 		return rollupData{}, err
 	}
 
-	for source, span := range sourceSpans {
-		fmt.Println("source", source)
-		fmt.Println("span", span)
+	for _, span := range sourceSpans {
 		if span[0].StartTimestampNanos == 0 {
-			return rollupData{}, nil
+			return rollupData{}, errors.Errorf(
+				"%s has no data between %s and %s",
+				series.Name,
+				time.Unix(0, qts.StartNanos),
+				time.Unix(0, qts.EndNanos),
+			)
 		}
 	}
 
@@ -463,10 +469,16 @@ func (db *DB) rollupQuery(
 	}
 
 	res := make([]tspb.TimeSeriesDatapoint, 0)
-	fmt.Println("res", res)
+
 	aggregateSpansToDatapoints(sourceSpans, q, qts, series.Resolution.SampleDuration(), &res)
+
 	if len(res) == 0 {
-		return rollupData{}, nil
+		return rollupData{}, fmt.Errorf(
+			"%s has no data between %s and %s",
+			series.Name,
+			time.Unix(0, qts.StartNanos),
+			time.Unix(0, qts.EndNanos),
+		)
 	}
 	res = trimTimeseriesDatapointSlice(res, qts)
 	rollup := computeRollupsFromData(tspb.TimeSeriesData{Name: series.Name, Source: "", Datapoints: res}, qts.EndNanos-qts.StartNanos)
@@ -482,7 +494,6 @@ func (db *DB) rollupQuery(
 func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
 
 	compressedDatapoint := datapoints[0]
-
 	for i := 1; i < len(datapoints); i++ {
 		compressedDatapoint.variance = computeParallelVariance(
 			parallelVarianceArgs{
@@ -504,6 +515,17 @@ func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
 	}
 
 	return compressedDatapoint
+}
+
+func compressRollupDatapointsAtTimestamp(datapoints []rollupDatapoint, timestamp int64) rollupDatapoint {
+	if len(datapoints) > 0 {
+		datapoints[0].timestampNanos = timestamp
+		return compressRollupDatapoints(datapoints)
+	} else {
+		return rollupDatapoint{
+			timestampNanos: timestamp,
+		}
+	}
 }
 
 // If you send a request for 1 minute worth of metrics it's inclusive of the final period
