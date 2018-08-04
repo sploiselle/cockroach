@@ -118,6 +118,7 @@ func initCLIDefaults() {
 	startCtx.listeningURLFile = ""
 	startCtx.pidFile = ""
 	startCtx.inBackground = false
+	startCtx.monitorMetrics = ""
 
 	quitCtx.serverDecommission = false
 
@@ -274,6 +275,7 @@ var startCtx struct {
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
+<<<<<<< HEAD
 
 	// inBackground is set to true when restarting in the
 	// background after --background was processed.
@@ -290,6 +292,10 @@ var startCtx struct {
 	// logging settings specific to file logging.
 	logDir     log.DirName
 	logDirFlag *pflag.Flag
+=======
+	// regular expression for metrics to monitor
+	monitorMetrics string
+>>>>>>> failed attempt to add flag
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.

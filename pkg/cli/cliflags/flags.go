@@ -869,4 +869,10 @@ Addresses for network benchmark.`,
 		Description: `
 Latency or throughput mode.`,
 	}
+
+	MonitorMetrics = FlagInfo{
+		Name: "monitor",
+		Description: `Monitor internal metrics whose names match the provided 
+		regular expression match the regular expression`,
+	}
 )

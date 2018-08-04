@@ -274,6 +274,9 @@ func init() {
 	{
 		f := StartCmd.Flags()
 
+		// Enable metric monitoring
+		StringFlag(f, &startCtx.monitorMetrics, cliflags.MonitorMetrics, startCtx.monitorMetrics)
+
 		// Server flags.
 		VarFlag(f, addrSetter{&startCtx.serverListenAddr, &serverListenPort}, cliflags.ListenAddr)
 		VarFlag(f, addrSetter{&serverAdvertiseAddr, &serverAdvertisePort}, cliflags.AdvertiseAddr)

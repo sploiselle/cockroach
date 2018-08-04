@@ -258,6 +258,10 @@ type Config struct {
 	EnableWebSessionAuthentication bool
 
 	enginesCreated bool
+
+	// MonitorMetrics enables monitoring for any metric that matches a regular
+	// expression provided by the user
+	MonitorMetrics string
 }
 
 // HistogramWindowInterval is used to determine the approximate length of time
