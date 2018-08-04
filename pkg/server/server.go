@@ -1471,9 +1471,12 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 	s.tsDB.PollSource(
 		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
-
-	s.tsMonitor = ts.NewMonitor(s.tsDB, s.recorder.GetMetricsMetadata(), s.st)
-	s.tsMonitor.Start()
+	if s.cfg.MonitorMetrics != "" {
+		s.tsMonitor = ts.NewMonitor(s.tsDB, s.recorder.GetMetricsMetadata(), s.st)
+		s.tsMonitor.Start()
+	} else {
+		fmt.Println("no monitor, bucko")
+	}
 
 	// Begin recording status summaries.
 	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)

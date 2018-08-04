@@ -744,4 +744,10 @@ in the history of the cluster.`,
 		Name:        "align",
 		Description: `Align the output.`,
 	}
+
+	MonitorMetrics = FlagInfo{
+		Name: "monitor",
+		Description: `Monitor internal metrics whose names match the provided 
+		regular expression match the regular expression`,
+	}
 )

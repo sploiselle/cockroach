@@ -189,6 +189,9 @@ func init() {
 	{
 		f := StartCmd.Flags()
 
+		// Enable metric monitoring
+		StringFlag(f, &startCtx.monitorMetrics, cliflags.MonitorMetrics, startCtx.monitorMetrics)
+
 		// Server flags.
 		StringFlag(f, &startCtx.serverConnHost, cliflags.ServerHost, startCtx.serverConnHost)
 		StringFlag(f, &serverConnPort, cliflags.ServerPort, serverConnPort)

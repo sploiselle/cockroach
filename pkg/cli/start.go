@@ -438,6 +438,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	serverCfg.Insecure = startCtx.serverInsecure
 	serverCfg.SSLCertsDir = startCtx.serverSSLCertsDir
 	serverCfg.User = security.NodeUser
+	serverCfg.MonitorMetrics = startCtx.monitorMetrics
 	// As well as derived temporary/auxiliary directory specifications.
 	if serverCfg.Settings.ExternalIODir, err = initExternalIODir(ctx, serverCfg.Stores.Specs[0]); err != nil {
 		return err

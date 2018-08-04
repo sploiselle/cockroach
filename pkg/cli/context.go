@@ -107,6 +107,7 @@ func initCLIDefaults() {
 	startCtx.serverConnHost = ""
 	startCtx.tempDir = ""
 	startCtx.externalIODir = ""
+	startCtx.monitorMetrics = ""
 
 	quitCtx.serverDecommission = false
 
@@ -225,6 +226,8 @@ var startCtx struct {
 	// directory to use for remotely-initiated operations that can
 	// specify node-local I/O paths, like BACKUP/RESTORE/IMPORT.
 	externalIODir string
+	// regular expression for metrics to monitor
+	monitorMetrics string
 }
 
 // quitCtx captures the command-line parameters of the `quit` command.
