@@ -20,10 +20,12 @@
 package ts
 
 import (
+	"container/ring"
 	"context"
 	"fmt"
 	"log"
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -45,16 +47,16 @@ const (
 )
 
 type validatedData struct {
-	valid bool
-	data  rollupDatapoint
+	valid  bool
+	rollup rollupDatapoint
 }
 
 type Level struct {
 	res                   RollupRes
-	data                  []validatedData
+	dataRing              *ring.Ring
 	bufferLen             int
-	currentBufferPos      int
 	compressionPeriod     int // bufferLen + 1; disabled by 0
+	currentRingPos        *ring.Ring
 	currentCompressionPos int
 	mostRecentTSNanos     int64
 }
@@ -89,10 +91,9 @@ type MetricDetails struct {
 }
 
 type Monitor struct {
-	db         *DB
-	metrics    map[string]*MetricDetails
-	mem        QueryMemoryContext
-	randMetric string
+	db      *DB
+	metrics map[string]*MetricDetails
+	mem     QueryMemoryContext
 }
 
 const (
@@ -113,7 +114,7 @@ var quantiles = [8]string{
 	"-p50",
 }
 
-func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Monitor {
+func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings, metricRegex string) *Monitor {
 
 	bytesMonitor := mon.MakeMonitor("timeseries monitor", mon.MemoryResource, nil, nil, 0, 100*1024*1024, st)
 	bytesMonitor.Start(context.TODO(), nil, mon.MakeStandaloneBudget(100*1024*1024))
@@ -142,7 +143,8 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Mo
 				}
 
 				for i, level := range newMetric.levels {
-					newMetric.levels[i].data = make([]validatedData, level.bufferLen)
+					newMetric.levels[i].dataRing = ring.New(level.bufferLen)
+					newMetric.levels[i].currentRingPos = newMetric.levels[i].dataRing
 				}
 
 				metrics[metadata.TimeseriesPrefix+name+quantile] = &newMetric
@@ -154,31 +156,33 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings) *Mo
 			}
 
 			for i, level := range newMetric.levels {
-				newMetric.levels[i].data = make([]validatedData, level.bufferLen)
+				newMetric.levels[i].dataRing = ring.New(level.bufferLen)
+				newMetric.levels[i].currentRingPos = newMetric.levels[i].dataRing
 
 			}
 			metrics[metadata.TimeseriesPrefix+name] = &newMetric
 		}
 	}
 
-	var randMetric string
-	// for k := range metrics {
-	// 	randMetric = k
-	// }
-	randMetric = "cr.store.rocksdb.memtable.total-size"
+	for name := range metrics {
+		matched, _ := regexp.MatchString(metricRegex, name)
+		if !matched {
+			delete(metrics, name)
+		}
+	}
 
 	monitor := Monitor{
 		db,
 		metrics,
 		qmc,
-		randMetric,
 	}
+
+	fmt.Printf("Monitoring %d metrics\n", len(monitor.metrics))
 
 	return &monitor
 }
 
 func (m *Monitor) Start() {
-	fmt.Println("m.randMetric", m.randMetric)
 	go doEvery(time.Minute, m.Query)
 }
 
@@ -192,139 +196,150 @@ func doEvery(d time.Duration, f func()) {
 func (m *Monitor) Query() {
 
 	go func() {
-		metric := m.metrics[m.randMetric]
-		thisLevel := &metric.levels[OneM]
 
-		var now, sKey, eKey int64
-		if thisLevel.mostRecentTSNanos == 0 {
-			// time.Sleep(time.Second * 10)
-			now = timeutil.Now().UnixNano()
-			// Get nearest 1m interval in the past
-			now = now - (now % OneMNanos)
+		for metricName, metricDeets := range m.metrics {
 
-			sKey = now - OneMNanos
-			eKey = now
-		} else {
-			sKey = thisLevel.mostRecentTSNanos + OneMNanos
-			now = sKey + OneMNanos
-			eKey = now
-		}
+			thisLevel := &metricDeets.levels[OneM]
 
-		isCounter := true
-		// isCounter := m.metrics[m.randMetric].metadata.MetricType == prometheusgo.MetricType_COUNTER
-		// randMetric = "cr.node.sys.uptime"
-		// for k, v := range m.metrics {
-		// 	randMetric = k
+			var now, sKey, eKey int64
+			if thisLevel.mostRecentTSNanos == 0 {
+				// time.Sleep(time.Second * 10)
+				now = timeutil.Now().UnixNano()
+				// Get nearest 1m interval in the past
+				now = now - (now % OneMNanos)
 
-		// 	if v.metadata.MetricType {
-		// 		isCounter = true
-		// 	}
-		// }
-
-		fmt.Println("m.randMetric", m.randMetric)
-
-		tsri := timeSeriesResolutionInfo{
-			m.randMetric,
-			Resolution10s,
-		}
-
-		targetSpan := roachpb.Span{
-			Key: MakeDataKey(m.randMetric, "1" /* source */, Resolution10s, sKey),
-			EndKey: MakeDataKey(
-				m.randMetric, "1" /* source */, Resolution10s, eKey,
-			),
-		}
-
-		qts := QueryTimespan{sKey, eKey, now, Resolution10s.SampleDuration()}
-
-		res, err := m.db.rollupQuery(
-			context.TODO(),
-			tsri,
-			targetSpan,
-			Resolution10s,
-			m.mem,
-			qts,
-			isCounter,
-		)
-		var dataToAdd validatedData
-
-		if err != nil || len(res.datapoints) < 1 {
-			fmt.Println(err)
-			dataToAdd = validatedData{
-				valid: false,
-				data:  rollupDatapoint{timestampNanos: sKey},
+				sKey = now - OneMNanos
+				eKey = now
+			} else {
+				sKey = thisLevel.mostRecentTSNanos + OneMNanos
+				now = sKey + OneMNanos
+				eKey = now
 			}
-		} else {
-			dataToAdd = validatedData{
-				valid: true,
-				data:  res.datapoints[0],
-			}
-		}
 
-		metric.addDataToLevel(dataToAdd, OneM)
+			isCounter := true
+
+			tsri := timeSeriesResolutionInfo{
+				metricName,
+				Resolution10s,
+			}
+
+			targetSpan := roachpb.Span{
+				Key: MakeDataKey(metricName, "1" /* source */, Resolution10s, sKey),
+				EndKey: MakeDataKey(
+					metricName, "1" /* source */, Resolution10s, eKey,
+				),
+			}
+
+			qts := QueryTimespan{sKey, eKey, now, Resolution10s.SampleDuration()}
+
+			res, err := m.db.rollupQuery(
+				context.TODO(),
+				tsri,
+				targetSpan,
+				Resolution10s,
+				m.mem,
+				qts,
+				isCounter,
+			)
+			var dataToAdd validatedData
+
+			if err != nil || len(res.datapoints) < 1 {
+				fmt.Println(err)
+				dataToAdd = validatedData{
+					valid:  false,
+					rollup: rollupDatapoint{timestampNanos: sKey},
+				}
+			} else {
+				dataToAdd = validatedData{
+					valid:  true,
+					rollup: res.datapoints[0],
+				}
+			}
+
+			fmt.Printf("%s \n", metricName)
+			fmt.Println("\t", dataToAdd.valid)
+			fmt.Println("\t", dataToAdd.rollup)
+
+			metricDeets.addDataToLevel(dataToAdd, OneM)
+		}
+		fmt.Println("----------------------------------------------------------------------")
 	}()
 }
 
-func (mdt *MetricDetails) addDataToLevel(data validatedData, level RollupRes) {
+func (mdt *MetricDetails) addDataToLevel(newData validatedData, level RollupRes) {
 	thisLevel := &mdt.levels[level]
-	thisLevel.data[thisLevel.currentBufferPos] = data
+	thisLevel.currentRingPos.Value = newData
 	// Oldest data is one to the right
-	oldestData := thisLevel.data[(thisLevel.currentBufferPos+1)%thisLevel.bufferLen]
-
-	if oldestData.valid && data.valid {
-		anovaPass05 := anova(0.05, []rollupDatapoint{data.data, oldestData.data})
-		if !anovaPass05 {
-			fmt.Printf(
-				"!!!WARNING!!! %s failed between %v and %v\nold: &v\nnew: %v\n",
-				mdt.metadata.Name,
-				time.Unix(0, oldestData.data.timestampNanos),
-				time.Unix(0, data.data.timestampNanos),
-				oldestData.data,
-				data.data,
-			)
+	if thisLevel.currentRingPos.Next().Value != nil {
+		oldestRingData := thisLevel.currentRingPos.Next().Value.(validatedData)
+		if oldestRingData.valid && newData.valid {
+			anovaPass05 := anova(0.05, []rollupDatapoint{newData.rollup, oldestRingData.rollup})
+			if !anovaPass05 {
+				fmt.Printf(
+					"!!!WARNING!!! %s failed between %v and %v\nold: %v\nnew: %v\n",
+					mdt.metadata.Name,
+					time.Unix(0, oldestRingData.rollup.timestampNanos),
+					time.Unix(0, newData.rollup.timestampNanos),
+					oldestRingData.rollup,
+					newData.rollup,
+				)
+			}
 		}
-	} else {
-		fmt.Println("No anova")
 	}
+
 	thisLevel.currentCompressionPos = (thisLevel.currentCompressionPos + 1) % thisLevel.compressionPeriod
 	if thisLevel.currentCompressionPos == 0 && thisLevel.compressionPeriod != 0 {
 		mdt.compressData(thisLevel)
 	}
-	thisLevel.currentBufferPos = (thisLevel.currentBufferPos + 1) % thisLevel.bufferLen
-	thisLevel.mostRecentTSNanos = data.data.timestampNanos
-	fmt.Println("thisLevel", thisLevel)
+
+	thisLevel.mostRecentTSNanos = newData.rollup.timestampNanos
+	fmt.Println("\tthisLevel", thisLevel)
+	// thisLevel.currentRingPos.Do(func(p interface{}) {
+	// 	if p != nil {
+	// 		fmt.Println("ring val ", thisLevel.res, p.(validatedData))
+	// 	}
+	// })
+	thisLevel.currentRingPos = thisLevel.currentRingPos.Next()
 }
 
 func (mdt *MetricDetails) compressData(level *Level) {
-	period := level.compressionPeriod
-	var datapointsToCompress []rollupDatapoint
+	var datapointsToCompressRing []rollupDatapoint
 
-	oldestIndex := (level.currentBufferPos + level.bufferLen - period + 1) % level.bufferLen
-	oldfestTimestamp := level.data[oldestIndex].data.timestampNanos
-
-	for i := 0; i < period; i++ {
-		indexPos := (oldestIndex + i) % level.bufferLen
-		if level.data[indexPos].valid {
-			datapointsToCompress = append(datapointsToCompress, level.data[indexPos].data)
+	ringCursor := level.currentRingPos
+	for i := 0; i < level.compressionPeriod; i++ {
+		if ringCursor.Value != nil {
+			if ringCursor.Value.(validatedData).valid {
+				datapointsToCompressRing = append(datapointsToCompressRing, ringCursor.Value.(validatedData).rollup)
+			}
 		}
+
+		ringCursor = ringCursor.Prev()
 	}
+
+	var oldestTimestamp int64
+	// ringCursor ends up one past the "end" of the compression period
+	if ringCursor.Next().Value != nil {
+		oldestTimestamp = ringCursor.Next().Value.(validatedData).rollup.timestampNanos
+	}
+
 	var dataToAdd validatedData
-	if len(datapointsToCompress) > 0 {
-		compressedData := compressRollupDatapointsAtTimestamp(datapointsToCompress, oldfestTimestamp)
+	if len(datapointsToCompressRing) > 0 {
+		compressedData := compressRollupDatapointsAtTimestamp(datapointsToCompressRing, oldestTimestamp)
 		dataToAdd = validatedData{
-			valid: true,
-			data:  compressedData,
+			valid:  true,
+			rollup: compressedData,
 		}
 	} else {
 		dataToAdd = validatedData{
 			valid: false,
-			data: rollupDatapoint{
-				timestampNanos: oldfestTimestamp,
+			rollup: rollupDatapoint{
+				timestampNanos: oldestTimestamp,
 			},
 		}
 	}
-	newLevel := RollupRes(int(level.res) + 1)
-	mdt.addDataToLevel(dataToAdd, newLevel)
+
+	nextRes := RollupRes(int(level.res) + 1)
+	mdt.addDataToLevel(dataToAdd, nextRes)
 }
 
 type anovaElement struct {
@@ -348,12 +363,13 @@ type anovaVals struct {
 }
 
 func anova(fVal float32, stats []rollupDatapoint) bool {
-	fmt.Printf("anova between %v", stats[0].timestampNanos)
+	fmt.Printf("anova between %v", time.Unix(0, stats[0].timestampNanos))
+
 	anovaElements := make([]anovaElement, len(stats))
 
 	for i, stat := range stats {
 		if i > 0 {
-			fmt.Printf(" and %v\n", stat.timestampNanos)
+			fmt.Printf(" and %v\n", time.Unix(0, stat.timestampNanos))
 		}
 		anovaElements[i] = anovaElement{
 			g:    1,

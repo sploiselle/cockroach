@@ -40,6 +40,27 @@ type rollupDatapoint struct {
 	variance       float64
 }
 
+func (r rollupDatapoint) String() string {
+	return fmt.Sprintf(
+		`Timestamp: %v
+		First: %v
+		Last: %v
+		Min: %v
+		Max: %v
+		Sum: %v
+		Count: %v
+		Variance: %v`,
+		time.Unix(0, r.timestampNanos),
+		r.first,
+		r.last,
+		r.min,
+		r.max,
+		r.sum,
+		r.count,
+		r.variance,
+	)
+}
+
 type rollupData struct {
 	name       string
 	source     string
@@ -487,7 +508,6 @@ func (db *DB) rollupQuery(
 		rollup.datapoints = []rollupDatapoint{compressedRollup}
 	}
 
-	fmt.Println(rollup)
 	return rollup, nil
 }
 
@@ -510,7 +530,7 @@ func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
 		compressedDatapoint.count += datapoints[i].count
 		compressedDatapoint.last = datapoints[i].last
 		compressedDatapoint.max = math.Max(compressedDatapoint.max, datapoints[i].max)
-		compressedDatapoint.min = math.Max(compressedDatapoint.max, datapoints[i].max)
+		compressedDatapoint.min = math.Min(compressedDatapoint.max, datapoints[i].max)
 		compressedDatapoint.sum += datapoints[i].sum
 	}
 
