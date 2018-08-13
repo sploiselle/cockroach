@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/pkg/errors"
 )
 
 type rollupDatapoint struct {
@@ -313,203 +312,252 @@ func (db *DB) queryAndComputeRollupsForSpan(
 
 // queryAndComputeRollupsForSpan2 queries time series data from the provided
 // span, up to a maximum limit of rows based on memory limits.
-func (db *DB) queryForSpan(
-	ctx context.Context,
-	series timeSeriesResolutionInfo,
-	span roachpb.Span,
-	targetResolution Resolution,
-	qmc QueryMemoryContext,
-) (map[string]rollupData, error) {
-	rollupDataMap := make(map[string]rollupData)
-	b := &client.Batch{}
+// func (db *DB) queryForSpan(
+// 	ctx context.Context,
+// 	series timeSeriesResolutionInfo,
+// 	span roachpb.Span,
+// 	targetResolution Resolution,
+// 	qmc QueryMemoryContext,
+// ) (map[string]rollupData, error) {
+// 	rollupDataMap := make(map[string]rollupData)
+// 	b := &client.Batch{}
 
-	sameKey := true
+// 	sameKey := true
 
-	for k, v := range span.Key {
-		if v != span.EndKey[k] {
-			sameKey = false
-		}
-	}
+// 	for k, v := range span.Key {
+// 		if v != span.EndKey[k] {
+// 			sameKey = false
+// 		}
+// 	}
 
-	if sameKey {
-		b.Header.MaxSpanRequestKeys = 0
-		b.Get(span.Key)
-	} else {
-		b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
-		b.Scan(span.Key, span.EndKey)
-	}
+// 	if sameKey {
+// 		b.Header.MaxSpanRequestKeys = 0
+// 		b.Get(span.Key)
+// 	} else {
+// 		b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
+// 		b.Scan(span.Key, span.EndKey)
+// 	}
 
-	if err := db.db.Run(ctx, b); err != nil {
-		return nil, err
-	}
+// 	if err := db.db.Run(ctx, b); err != nil {
+// 		return nil, err
+// 	}
 
-	// Convert result data into a map of source strings to ordered spans of
-	// time series data.
-	diskAccount := qmc.workerMonitor.MakeBoundAccount()
-	defer diskAccount.Close(ctx)
-	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
-	if err != nil {
-		return nil, err
-	}
-	for source, span := range sourceSpans {
-		rollup, ok := rollupDataMap[source]
-		if !ok {
-			rollup = rollupData{
-				name:   series.Name,
-				source: source,
-			}
-			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(rollup))); err != nil {
-				return nil, err
-			}
-		}
+// 	// Convert result data into a map of source strings to ordered spans of
+// 	// time series data.
+// 	diskAccount := qmc.workerMonitor.MakeBoundAccount()
+// 	defer diskAccount.Close(ctx)
+// 	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	for source, span := range sourceSpans {
+// 		rollup, ok := rollupDataMap[source]
+// 		if !ok {
+// 			rollup = rollupData{
+// 				name:   series.Name,
+// 				source: source,
+// 			}
+// 			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(rollup))); err != nil {
+// 				return nil, err
+// 			}
+// 		}
 
-		var end timeSeriesSpanIterator
-		for start := makeTimeSeriesSpanIterator(span); start.isValid(); start = end {
-			rollupPeriod := targetResolution.SampleDuration()
-			sampleTimestamp := normalizeToPeriod(start.timestamp, rollupPeriod)
+// 		var end timeSeriesSpanIterator
+// 		for start := makeTimeSeriesSpanIterator(span); start.isValid(); start = end {
+// 			rollupPeriod := targetResolution.SampleDuration()
+// 			sampleTimestamp := normalizeToPeriod(start.timestamp, rollupPeriod)
 
-			newStart, _ := start.derivative(tspb.TimeSeriesQueryAggregator_AVG)
-			newStart *= float64(time.Second.Nanoseconds()) / float64(start.samplePeriod())
+// 			newStart, _ := start.derivative(tspb.TimeSeriesQueryAggregator_AVG)
+// 			newStart *= float64(time.Second.Nanoseconds()) / float64(start.samplePeriod())
 
-			datapoint := rollupDatapoint{
-				timestampNanos: sampleTimestamp,
-				max:            -math.MaxFloat64,
-				min:            math.MaxFloat64,
-				first:          newStart,
-			}
+// 			datapoint := rollupDatapoint{
+// 				timestampNanos: sampleTimestamp,
+// 				max:            -math.MaxFloat64,
+// 				min:            math.MaxFloat64,
+// 				first:          newStart,
+// 			}
 
-			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(datapoint))); err != nil {
-				return nil, err
-			}
-			for end = start; end.isValid() && normalizeToPeriod(end.timestamp, rollupPeriod) == sampleTimestamp; end.forward() {
-				datapoint.last = end.last()
-				datapoint.max = math.Max(datapoint.max, end.max())
-				datapoint.min = math.Min(datapoint.min, end.min())
+// 			if err := qmc.resultAccount.Grow(ctx, int64(unsafe.Sizeof(datapoint))); err != nil {
+// 				return nil, err
+// 			}
+// 			for end = start; end.isValid() && normalizeToPeriod(end.timestamp, rollupPeriod) == sampleTimestamp; end.forward() {
+// 				datapoint.last = end.last()
+// 				datapoint.max = math.Max(datapoint.max, end.max())
+// 				datapoint.min = math.Min(datapoint.min, end.min())
 
-				// Chan et al. algorithm for computing parallel variance. This allows
-				// the combination of two previously computed sample variances into a
-				// variance for the combined sample; this is needed when further
-				// downsampling previously downsampled variance values.
-				if datapoint.count > 0 {
-					datapoint.variance = computeParallelVariance(
-						parallelVarianceArgs{
-							count:    end.count(),
-							average:  end.average(),
-							variance: end.variance(),
-						},
-						parallelVarianceArgs{
-							count:    datapoint.count,
-							average:  datapoint.sum / float64(datapoint.count),
-							variance: datapoint.variance,
-						},
-					)
-				}
+// 				// Chan et al. algorithm for computing parallel variance. This allows
+// 				// the combination of two previously computed sample variances into a
+// 				// variance for the combined sample; this is needed when further
+// 				// downsampling previously downsampled variance values.
+// 				if datapoint.count > 0 {
+// 					datapoint.variance = computeParallelVariance(
+// 						parallelVarianceArgs{
+// 							count:    end.count(),
+// 							average:  end.average(),
+// 							variance: end.variance(),
+// 						},
+// 						parallelVarianceArgs{
+// 							count:    datapoint.count,
+// 							average:  datapoint.sum / float64(datapoint.count),
+// 							variance: datapoint.variance,
+// 						},
+// 					)
+// 				}
 
-				datapoint.count += end.count()
-				datapoint.sum += end.sum()
-			}
-			rollup.datapoints = append(rollup.datapoints, datapoint)
-		}
-		rollupDataMap[source] = rollup
-	}
+// 				datapoint.count += end.count()
+// 				datapoint.sum += end.sum()
+// 			}
+// 			rollup.datapoints = append(rollup.datapoints, datapoint)
+// 		}
+// 		rollupDataMap[source] = rollup
+// 	}
 
-	return rollupDataMap, nil
-}
+// 	return rollupDataMap, nil
+// }
 
-var ErrNoData = fmt.Errorf("%s has no data between %s and %s")
+// // rollupQuery whoa.
+// func (db *DB) getTimeSeriesSpansPerSource(
+// 	ctx context.Context,
+// 	series timeSeriesResolutionInfo,
+// 	span roachpb.Span,
+// 	targetResolution Resolution,
+// 	qmc QueryMemoryContext,
+// 	qts QueryTimespan,
+// 	counter bool,
+// ) (map[string]timeSeriesSpan, error) {
 
-// queryAndComputeRollupsForSpan2 queries time series data from the provided
-// span, up to a maximum limit of rows based on memory limits.
-func (db *DB) rollupQuery(
-	ctx context.Context,
-	series timeSeriesResolutionInfo,
-	span roachpb.Span,
-	targetResolution Resolution,
-	qmc QueryMemoryContext,
-	qts QueryTimespan,
-	counter bool,
-) (rollupData, error) {
+// 	b := &client.Batch{}
 
-	b := &client.Batch{}
+// 	sameKey := true
 
-	sameKey := true
+// 	for k, v := range span.Key {
+// 		if v != span.EndKey[k] {
+// 			sameKey = false
+// 		}
+// 	}
 
-	for k, v := range span.Key {
-		if v != span.EndKey[k] {
-			sameKey = false
-		}
-	}
+// 	if sameKey {
+// 		b.Header.MaxSpanRequestKeys = 0
+// 		b.Get(span.Key)
+// 	} else {
+// 		b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
+// 		b.Scan(span.Key, span.EndKey)
+// 	}
 
-	if sameKey {
-		b.Header.MaxSpanRequestKeys = 0
-		b.Get(span.Key)
-	} else {
-		b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
-		b.Scan(span.Key, span.EndKey)
-	}
+// 	if err := db.db.Run(ctx, b); err != nil {
+// 		return nil, err
+// 	}
 
-	if err := db.db.Run(ctx, b); err != nil {
-		return rollupData{}, err
-	}
+// 	fmt.Println("kvs", b.Results[0].Rows)
 
-	// Convert result data into a map of source strings to ordered spans of
-	// time series data.
-	diskAccount := qmc.workerMonitor.MakeBoundAccount()
-	defer diskAccount.Close(ctx)
-	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
-	if err != nil {
-		return rollupData{}, err
-	}
+// 	// Convert result data into a map of source strings to ordered spans of
+// 	// time series data.
+// 	diskAccount := qmc.workerMonitor.MakeBoundAccount()
+// 	defer diskAccount.Close(ctx)
+// 	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
 
-	for _, span := range sourceSpans {
-		if span[0].StartTimestampNanos == 0 {
-			return rollupData{}, errors.Errorf(
-				"%s has no data between %s and %s",
-				series.Name,
-				time.Unix(0, qts.StartNanos),
-				time.Unix(0, qts.EndNanos),
-			)
-		}
-	}
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	agg := tspb.TimeSeriesQueryAggregator_SUM
-	var der tspb.TimeSeriesQueryDerivative
+// 	return sourceSpans, nil
+// }
 
-	if counter {
-		der = tspb.TimeSeriesQueryDerivative_DERIVATIVE
-	} else {
-		der = tspb.TimeSeriesQueryDerivative_NONE
-	}
+// // rollupQuery whoa.
+// func (db *DB) rollupQuery(
+// 	ctx context.Context,
+// 	series timeSeriesResolutionInfo,
+// 	span roachpb.Span,
+// 	targetResolution Resolution,
+// 	qmc QueryMemoryContext,
+// 	qts QueryTimespan,
+// 	counter bool,
+// ) (rollupData, error) {
 
-	q := tspb.Query{
-		series.Name,
-		&agg,
-		&agg,
-		&der,
-		[]string{""},
-	}
+// 	b := &client.Batch{}
 
-	res := make([]tspb.TimeSeriesDatapoint, 0)
+// 	sameKey := true
 
-	aggregateSpansToDatapoints(sourceSpans, q, qts, series.Resolution.SampleDuration(), &res)
+// 	for k, v := range span.Key {
+// 		if v != span.EndKey[k] {
+// 			sameKey = false
+// 		}
+// 	}
 
-	if len(res) == 0 {
-		return rollupData{}, fmt.Errorf(
-			"%s has no data between %s and %s",
-			series.Name,
-			time.Unix(0, qts.StartNanos),
-			time.Unix(0, qts.EndNanos),
-		)
-	}
-	res = trimTimeseriesDatapointSlice(res, qts)
-	rollup := computeRollupsFromData(tspb.TimeSeriesData{Name: series.Name, Source: "", Datapoints: res}, qts.EndNanos-qts.StartNanos)
-	if len(rollup.datapoints) > 1 {
-		compressedRollup := compressRollupDatapoints(rollup.datapoints)
-		rollup.datapoints = []rollupDatapoint{compressedRollup}
-	}
+// 	if sameKey {
+// 		b.Header.MaxSpanRequestKeys = 0
+// 		b.Get(span.Key)
+// 	} else {
+// 		b.Header.MaxSpanRequestKeys = qmc.GetMaxRollupSlabs(series.Resolution)
+// 		b.Scan(span.Key, span.EndKey)
+// 	}
 
-	return rollup, nil
-}
+// 	if err := db.db.Run(ctx, b); err != nil {
+// 		return rollupData{}, err
+// 	}
+
+// 	// fmt.Println("b.Results[0].Rows", b.Results[0].Rows)
+
+// 	// Convert result data into a map of source strings to ordered spans of
+// 	// time series data.
+// 	diskAccount := qmc.workerMonitor.MakeBoundAccount()
+// 	defer diskAccount.Close(ctx)
+// 	sourceSpans, err := convertKeysToSpans(ctx, b.Results[0].Rows, &diskAccount)
+// 	if err != nil {
+// 		return rollupData{}, err
+// 	}
+
+// 	// fmt.Println("sourceSpans", sourceSpans)
+
+// 	for _, span := range sourceSpans {
+// 		if span[0].StartTimestampNanos == 0 {
+// 			return rollupData{}, errors.Errorf(
+// 				"%s has no data between %s and %s",
+// 				series.Name,
+// 				time.Unix(0, qts.StartNanos),
+// 				time.Unix(0, qts.EndNanos),
+// 			)
+// 		}
+// 	}
+
+// 	agg := tspb.TimeSeriesQueryAggregator_AVG
+// 	var der tspb.TimeSeriesQueryDerivative
+
+// 	if counter {
+// 		der = tspb.TimeSeriesQueryDerivative_DERIVATIVE
+// 	} else {
+// 		der = tspb.TimeSeriesQueryDerivative_NONE
+// 	}
+
+// 	q := tspb.Query{
+// 		series.Name,
+// 		&agg,
+// 		&agg,
+// 		&der,
+// 		[]string{""},
+// 	}
+
+// 	res := make([]tspb.TimeSeriesDatapoint, 0)
+
+// 	aggregateSpansToDatapoints(sourceSpans, q, qts, series.Resolution.SampleDuration(), &res)
+
+// 	if len(res) == 0 {
+// 		return rollupData{}, fmt.Errorf(
+// 			"%s has no data between %s and %s",
+// 			series.Name,
+// 			time.Unix(0, qts.StartNanos),
+// 			time.Unix(0, qts.EndNanos),
+// 		)
+// 	}
+// 	res = trimTimeseriesDatapointSlice(res, qts)
+// 	rollup := computeRollupsFromData(tspb.TimeSeriesData{Name: series.Name, Source: "", Datapoints: res}, qts.EndNanos-qts.StartNanos)
+// 	if len(rollup.datapoints) > 1 {
+// 		compressedRollup := compressRollupDatapoints(rollup.datapoints)
+// 		rollup.datapoints = []rollupDatapoint{compressedRollup}
+// 	}
+
+// 	return rollup, nil
+// }
 
 func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
 
@@ -527,10 +575,14 @@ func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
 				variance: datapoints[i].variance,
 			},
 		)
+		compressedDatapoint.timestampNanos = int64(math.Min(
+			float64(compressedDatapoint.timestampNanos),
+			float64(datapoints[i].timestampNanos)),
+		)
 		compressedDatapoint.count += datapoints[i].count
 		compressedDatapoint.last = datapoints[i].last
 		compressedDatapoint.max = math.Max(compressedDatapoint.max, datapoints[i].max)
-		compressedDatapoint.min = math.Min(compressedDatapoint.max, datapoints[i].max)
+		compressedDatapoint.min = math.Min(compressedDatapoint.min, datapoints[i].min)
 		compressedDatapoint.sum += datapoints[i].sum
 	}
 
@@ -546,22 +598,6 @@ func compressRollupDatapointsAtTimestamp(datapoints []rollupDatapoint, timestamp
 			timestampNanos: timestamp,
 		}
 	}
-}
-
-// If you send a request for 1 minute worth of metrics it's inclusive of the final period
-// e.g. [11:00:00,11:01:00),[11:01:00,11:01:10). However, if you instead decrement the 1-minute
-// frame by one nanosecond, you instead end up with really ugly normalized timestamps.
-// This function provides the option of simply lopping off the fina
-func trimTimeseriesDatapointSlice(
-	datapoints []tspb.TimeSeriesDatapoint,
-	qts QueryTimespan,
-) []tspb.TimeSeriesDatapoint {
-	expectedLen := (qts.EndNanos - qts.StartNanos) / qts.SampleDurationNanos
-	if len(datapoints) > int(expectedLen) {
-		return datapoints[:expectedLen]
-	}
-
-	return datapoints
 }
 
 type parallelVarianceArgs struct {
