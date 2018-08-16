@@ -37,13 +37,13 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-type RollupRes int
+type rollupRes int
 
 const (
-	OneM RollupRes = 0
-	TenM RollupRes = 1
-	OneH RollupRes = 2
-	OneD RollupRes = 3
+	oneM rollupRes = 0
+	tenM rollupRes = 1
+	oneH rollupRes = 2
+	oneD rollupRes = 3
 )
 
 type validatedData struct {
@@ -52,7 +52,7 @@ type validatedData struct {
 }
 
 type Level struct {
-	res                   RollupRes
+	res                   rollupRes
 	dataRing              *ring.Ring
 	bufferLen             int
 	compressionPeriod     int // bufferLen + 1; disabled by 0
@@ -62,31 +62,32 @@ type Level struct {
 	mostRecentTSNanos     int64
 }
 
-var OneMinuteLevel = Level{
-	res:               OneM,
+var oneMinuteLevel = Level{
+	res:               oneM,
 	bufferLen:         11,
 	compressionPeriod: 10,
 	targetRollupCount: 6,
 }
 
-var TenMinuteLevel = Level{
-	res:               TenM,
+var tenMinuteLevel = Level{
+	res:               tenM,
 	bufferLen:         7,
 	compressionPeriod: 6,
 	targetRollupCount: 6 * 10,
 }
 
-var OneHourLevel = Level{
-	res:               OneH,
+var oneHourLevel = Level{
+	res:               oneH,
 	bufferLen:         25,
 	compressionPeriod: 24,
 	targetRollupCount: 6 * 10 * 6,
 }
 
-var OneDayLevel = Level{
-	res:               OneD,
+var oneDayLevel = Level{
+	res:               oneD,
 	bufferLen:         8,
 	compressionPeriod: 0,
+	targetRollupCount: 6 * 10 * 6 * 24,
 }
 
 type MetricDetails struct {
@@ -142,7 +143,7 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings, met
 			for _, quantile := range quantiles {
 
 				newMetric := MetricDetails{
-					levels:   [4]Level{OneMinuteLevel, TenMinuteLevel, OneHourLevel, OneDayLevel},
+					levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
 					metadata: metadata,
 				}
 
@@ -155,7 +156,7 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings, met
 			}
 		} else {
 			newMetric := MetricDetails{
-				levels:   [4]Level{OneMinuteLevel, TenMinuteLevel, OneHourLevel, OneDayLevel},
+				levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
 				metadata: metadata,
 			}
 
@@ -191,8 +192,7 @@ func (m *Monitor) Start() {
 }
 
 func doEvery(d time.Duration, f func()) {
-	for x := range time.Tick(d) {
-		fmt.Println(x)
+	for _ = range time.Tick(d) {
 		f()
 	}
 }
@@ -203,7 +203,7 @@ func (m *Monitor) Query() {
 
 		dataToAdd := validatedData{valid: true}
 
-		thisLevel := &metricDeets.levels[OneM]
+		thisLevel := &metricDeets.levels[oneM]
 
 		var now, sKey, eKey int64
 		if thisLevel.mostRecentTSNanos == 0 {
@@ -248,8 +248,26 @@ func (m *Monitor) Query() {
 
 		agg := tspb.TimeSeriesQueryAggregator_AVG
 		der := tspb.TimeSeriesQueryDerivative_DERIVATIVE
+		noDer := tspb.TimeSeriesQueryDerivative_NONE
 
-		q := tspb.Query{
+		if metricDeets.metadata.MetricType != prometheusgo.MetricType_COUNTER {
+			measureDatapoints := make([]tspb.TimeSeriesDatapoint, 0)
+
+			measureQ := tspb.Query{
+				metricName,
+				&agg,
+				&agg,
+				&noDer,
+				[]string{""},
+			}
+
+			aggregateSpansToDatapoints(sourceSpans, measureQ, qts, Resolution10s.SampleDuration(), &measureDatapoints)
+			measureDatapoints = trimTimeseriesDatapointSlice(measureDatapoints, qts)
+			measureRollup := computeRollupsFromData(tspb.TimeSeriesData{Name: metricName, Source: "", Datapoints: measureDatapoints}, qts.EndNanos-qts.StartNanos)
+			fmt.Println("measureRollup", measureRollup)
+		}
+
+		derQ := tspb.Query{
 			metricName,
 			&agg,
 			&agg,
@@ -257,25 +275,24 @@ func (m *Monitor) Query() {
 			[]string{""},
 		}
 
-		datapoints := make([]tspb.TimeSeriesDatapoint, 0)
+		derDatapoints := make([]tspb.TimeSeriesDatapoint, 0)
 
-		aggregateSpansToDatapoints(sourceSpans, q, qts, Resolution10s.SampleDuration(), &datapoints)
+		aggregateSpansToDatapoints(sourceSpans, derQ, qts, Resolution10s.SampleDuration(), &derDatapoints)
 
-		if len(datapoints) == 0 {
+		if len(derDatapoints) == 0 {
 			dataToAdd.valid = false
 		}
 
-		datapoints = trimTimeseriesDatapointSlice(datapoints, qts)
+		derDatapoints = trimTimeseriesDatapointSlice(derDatapoints, qts)
 
-		rollup := computeRollupsFromData(tspb.TimeSeriesData{Name: metricName, Source: "", Datapoints: datapoints}, qts.EndNanos-qts.StartNanos)
+		derRollup := computeRollupsFromData(tspb.TimeSeriesData{Name: metricName, Source: "", Datapoints: derDatapoints}, qts.EndNanos-qts.StartNanos)
 
-		if len(rollup.datapoints) > 1 {
-			compressedRollup := compressRollupDatapoints(rollup.datapoints)
-			rollup.datapoints = []rollupDatapoint{compressedRollup}
+		if len(derRollup.datapoints) > 1 {
+			compressedRollup := compressRollupDatapoints(derRollup.datapoints)
+			derRollup.datapoints = []rollupDatapoint{compressedRollup}
 		}
 
-		fmt.Println("ROLLUP", rollup.datapoints[0])
-		fmt.Println("dataToAdd.valid", dataToAdd.valid)
+		fmt.Println("ROLLUP", derRollup.datapoints[0])
 
 		// res, err := m.db.rollupQuery(
 		// 	context.TODO(),
@@ -288,13 +305,13 @@ func (m *Monitor) Query() {
 		// )
 
 		// Invalidate data if it doesn't have at least 80% of its values
-		if len(rollup.datapoints) < 1 {
+		if len(derRollup.datapoints) < 1 {
 			dataToAdd = validatedData{
 				valid:  false,
 				rollup: rollupDatapoint{timestampNanos: sKey},
 			}
 		} else {
-			if rollup.datapoints[0].count < 5 || !dataToAdd.valid {
+			if derRollup.datapoints[0].count < 5 || !dataToAdd.valid {
 				dataToAdd = validatedData{
 					valid:  false,
 					rollup: rollupDatapoint{timestampNanos: sKey},
@@ -302,7 +319,7 @@ func (m *Monitor) Query() {
 			} else {
 				dataToAdd = validatedData{
 					valid:  true,
-					rollup: rollup.datapoints[0],
+					rollup: derRollup.datapoints[0],
 				}
 			}
 		}
@@ -311,12 +328,12 @@ func (m *Monitor) Query() {
 		fmt.Println("\t", dataToAdd.valid)
 		fmt.Println("\t", dataToAdd.rollup)
 
-		metricDeets.addDataToLevel(dataToAdd, OneM)
+		metricDeets.addDataToLevel(dataToAdd, oneM)
 	}
 	fmt.Println("----------------------------------------------------------------------")
 }
 
-func (mdt *MetricDetails) addDataToLevel(newData validatedData, level RollupRes) {
+func (mdt *MetricDetails) addDataToLevel(newData validatedData, level rollupRes) {
 	thisLevel := &mdt.levels[level]
 	thisLevel.currentBufferPos.Value = newData
 	// Oldest data is one to the right
@@ -346,7 +363,7 @@ func (mdt *MetricDetails) addDataToLevel(newData validatedData, level RollupRes)
 			dataToAdd.valid = false
 			dataToAdd.rollup = rollupDatapoint{}
 		}
-		nextRes := RollupRes(int(level) + 1)
+		nextRes := rollupRes(int(level) + 1)
 		mdt.addDataToLevel(dataToAdd, nextRes)
 	}
 
