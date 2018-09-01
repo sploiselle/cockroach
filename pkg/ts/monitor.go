@@ -456,21 +456,21 @@ func anova(fVal float32, stats []rollupDatapoint) bool {
 		}
 	}
 
-	ssStats := calculateSuperSet(anovaElements)
+	superSetStats := calculateSuperSet(anovaElements)
 
 	sst := anovaRow{
-		ssStats.vari * float64(ssStats.g*ssStats.k-1),
-		float64(ssStats.g*ssStats.k - 1),
+		superSetStats.vari * float64(superSetStats.g*superSetStats.k-1),
+		float64(superSetStats.g*superSetStats.k - 1),
 	}
 
 	ssw := anovaRow{
-		ssStats.ssw,
-		float64(ssStats.g * (ssStats.k - 1)),
+		superSetStats.ssw,
+		float64(superSetStats.g * (superSetStats.k - 1)),
 	}
 
 	ssb := anovaRow{
 		sst.val - ssw.val,
-		float64(ssStats.g - 1),
+		float64(superSetStats.g - 1),
 	}
 
 	msw := (ssw.val / ssw.df)
@@ -536,7 +536,7 @@ func calculateSuperSet(ae []anovaElement) anovaElement {
 
 	ssVar := ((kFloat - 1) / (gFloat*kFloat - 1)) * (sumVar + varMean*(kFloat*(gFloat-1)/(kFloat-1)))
 
-	ssStats := anovaElement{
+	superSetStats := anovaElement{
 		g:    uint32(g),
 		k:    k,
 		mean: ssMean,
@@ -545,5 +545,5 @@ func calculateSuperSet(ae []anovaElement) anovaElement {
 		ssb:  ssSSB,
 	}
 
-	return ssStats
+	return superSetStats
 }
