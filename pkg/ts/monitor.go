@@ -28,6 +28,9 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -37,7 +40,7 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-type rollupRes int
+type rollupRes int32
 
 const (
 	oneM rollupRes = 0
@@ -96,7 +99,9 @@ type MetricDetails struct {
 }
 
 type Monitor struct {
+	nodeID  roachpb.NodeID
 	db      *DB
+	g       *gossip.Gossip
 	metrics map[string]*MetricDetails
 	mem     QueryMemoryContext
 }
@@ -119,7 +124,14 @@ var quantiles = [8]string{
 	"-p50",
 }
 
-func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings, metricRegex string) *Monitor {
+func NewMonitor(
+	nodeID roachpb.NodeID,
+	db *DB,
+	g *gossip.Gossip,
+	md map[string]metric.Metadata,
+	st *cluster.Settings,
+	metricRegex string,
+) *Monitor {
 
 	bytesMonitor := mon.MakeMonitor("timeseries monitor", mon.MemoryResource, nil, nil, 0, 100*1024*1024, st)
 	bytesMonitor.Start(context.TODO(), nil, mon.MakeStandaloneBudget(100*1024*1024))
@@ -135,56 +147,70 @@ func NewMonitor(db *DB, md map[string]metric.Metadata, st *cluster.Settings, met
 
 	qmc := MakeQueryMemoryContext(&bytesMonitor, &bytesMonitor, memOpts)
 
-	metrics := make(map[string]*MetricDetails)
+	metricsToMonitor := make(map[string]*MetricDetails)
 
 	for name, metadata := range md {
 		// Histograms are accessible only as 8 separate metrics; one for each quantile.
+		// Each must be tracked as a separate key in metricsToMonitor
 		if metadata.MetricType == prometheusgo.MetricType_HISTOGRAM {
 			for _, quantile := range quantiles {
 
-				newMetric := MetricDetails{
-					levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
-					metadata: metadata,
+				matched, _ := regexp.MatchString(metricRegex, metadata.TimeseriesPrefix+name+quantile)
+				if matched {
+					addMetric(metadata.TimeseriesPrefix+name+quantile, metadata, metricsToMonitor)
 				}
-
-				for i, level := range newMetric.levels {
-					newMetric.levels[i].dataRing = ring.New(level.bufferLen)
-					newMetric.levels[i].currentBufferPos = newMetric.levels[i].dataRing
-				}
-
-				metrics[metadata.TimeseriesPrefix+name+quantile] = &newMetric
 			}
 		} else {
-			newMetric := MetricDetails{
-				levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
-				metadata: metadata,
-			}
 
-			for i, level := range newMetric.levels {
-				newMetric.levels[i].dataRing = ring.New(level.bufferLen)
-				newMetric.levels[i].currentBufferPos = newMetric.levels[i].dataRing
-
+			matched, _ := regexp.MatchString(metricRegex, metadata.TimeseriesPrefix+name)
+			if matched {
+				addMetric(metadata.TimeseriesPrefix+name, metadata, metricsToMonitor)
 			}
-			metrics[metadata.TimeseriesPrefix+name] = &newMetric
 		}
 	}
 
-	for name := range metrics {
-		matched, _ := regexp.MatchString(metricRegex, name)
-		if !matched {
-			delete(metrics, name)
+	// Add all of these metrics to Gossip
+	for metricName := range metricsToMonitor {
+
+		gossipMetricKey := gossip.MakeKey("anomaly", metricName)
+		fmt.Println("gossipMetricKey", gossipMetricKey)
+		mr := &tspb.MetricRollups{MostRecent: make(map[int32]*tspb.RollupDatapoint)}
+
+		mr.MostRecent[int32(oneM)] = &tspb.RollupDatapoint{NodeID: int32(nodeID)}
+
+		err := g.AddInfoProto(gossipMetricKey, mr, 10*time.Minute)
+
+		if err != nil {
+			fmt.Printf("when adding %s to gossip, %s", metricName, err)
 		}
 	}
 
 	monitor := Monitor{
+		nodeID,
 		db,
-		metrics,
+		g,
+		metricsToMonitor,
 		qmc,
 	}
 
 	fmt.Printf("Monitoring %d metrics\n", len(monitor.metrics))
 
 	return &monitor
+}
+
+func addMetric(metricName string, metadata metric.Metadata, metrics map[string]*MetricDetails) {
+
+	newMetric := MetricDetails{
+		levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
+		metadata: metadata,
+	}
+
+	for i, level := range newMetric.levels {
+		newMetric.levels[i].dataRing = ring.New(level.bufferLen)
+		newMetric.levels[i].currentBufferPos = newMetric.levels[i].dataRing
+
+	}
+	metrics[metricName] = &newMetric
 }
 
 func (m *Monitor) Start() {
@@ -199,11 +225,11 @@ func doEvery(d time.Duration, f func()) {
 
 func (m *Monitor) Query() {
 
-	for metricName, metricDeets := range m.metrics {
+	for metricName, metricDetails := range m.metrics {
 
 		dataToAdd := validatedData{valid: true}
 
-		thisLevel := &metricDeets.levels[oneM]
+		thisLevel := &metricDetails.levels[oneM]
 
 		var now, sKey, eKey int64
 		if thisLevel.mostRecentTSNanos == 0 {
@@ -250,7 +276,7 @@ func (m *Monitor) Query() {
 		der := tspb.TimeSeriesQueryDerivative_DERIVATIVE
 		noDer := tspb.TimeSeriesQueryDerivative_NONE
 
-		if metricDeets.metadata.MetricType != prometheusgo.MetricType_COUNTER {
+		if metricDetails.metadata.MetricType != prometheusgo.MetricType_COUNTER {
 			measureDatapoints := make([]tspb.TimeSeriesDatapoint, 0)
 
 			measureQ := tspb.Query{
@@ -294,16 +320,6 @@ func (m *Monitor) Query() {
 
 		fmt.Println("ROLLUP", derRollup.datapoints[0])
 
-		// res, err := m.db.rollupQuery(
-		// 	context.TODO(),
-		// 	tsri,
-		// 	targetSpan,
-		// 	Resolution10s,
-		// 	m.mem,
-		// 	qts,
-		// 	isCounter,
-		// )
-
 		// Invalidate data if it doesn't have at least 80% of its values
 		if len(derRollup.datapoints) < 1 {
 			dataToAdd = validatedData{
@@ -311,6 +327,7 @@ func (m *Monitor) Query() {
 				rollup: rollupDatapoint{timestampNanos: sKey},
 			}
 		} else {
+			// I think this is could be moved up to the preceding if...
 			if derRollup.datapoints[0].count < 5 || !dataToAdd.valid {
 				dataToAdd = validatedData{
 					valid:  false,
@@ -328,12 +345,49 @@ func (m *Monitor) Query() {
 		fmt.Println("\t", dataToAdd.valid)
 		fmt.Println("\t", dataToAdd.rollup)
 
-		metricDeets.addDataToLevel(dataToAdd, oneM)
+		metricDetails.addDataToLevel(dataToAdd, oneM, m.g, metricName, int32(m.nodeID))
 	}
 	fmt.Println("----------------------------------------------------------------------")
 }
 
-func (mdt *MetricDetails) addDataToLevel(newData validatedData, level rollupRes) {
+func (mdt *MetricDetails) addDataToLevel(newData validatedData, level rollupRes, g *gossip.Gossip, mn string, nodeID int32) {
+
+	rollups := &tspb.MetricRollups{}
+
+	gossipMetricKey := gossip.MakeKey("anomaly", mn)
+	fmt.Println("Key?", gossipMetricKey)
+	g.GetInfoProto(gossipMetricKey, rollups)
+
+	fmt.Println("GOSSIP ROLLUPS????", rollups)
+
+	lastRollup, ok := rollups.MostRecent[int32(level)]
+
+	if ok {
+		fmt.Println("Time between this data and gossip is", (newData.rollup.timestampNanos-lastRollup.TimestampNanos)/int64(time.Second), "seconds")
+	}
+
+	var dataToGossip tspb.RollupDatapoint
+
+	if newData.valid {
+		dataToGossip = tspb.RollupDatapoint{
+			TimestampNanos: newData.rollup.timestampNanos,
+			First:          newData.rollup.first,
+			Last:           newData.rollup.last,
+			Min:            newData.rollup.min,
+			Max:            newData.rollup.max,
+			Sum:            newData.rollup.sum,
+			Count:          newData.rollup.count,
+			Variance:       newData.rollup.variance,
+			NodeID:         nodeID,
+		}
+	}
+
+	rollups.MostRecent[int32(level)] = &dataToGossip
+	fmt.Println("After adding to rollups", rollups)
+
+	fmt.Println("Did you get them?")
+	g.AddInfoProto(gossipMetricKey, rollups, 4*time.Minute)
+
 	thisLevel := &mdt.levels[level]
 	thisLevel.currentBufferPos.Value = newData
 	// Oldest data is one to the right
@@ -364,7 +418,7 @@ func (mdt *MetricDetails) addDataToLevel(newData validatedData, level rollupRes)
 			dataToAdd.rollup = rollupDatapoint{}
 		}
 		nextRes := rollupRes(int(level) + 1)
-		mdt.addDataToLevel(dataToAdd, nextRes)
+		mdt.addDataToLevel(dataToAdd, nextRes, g, mn, nodeID)
 	}
 
 	thisLevel.mostRecentTSNanos = newData.rollup.timestampNanos
