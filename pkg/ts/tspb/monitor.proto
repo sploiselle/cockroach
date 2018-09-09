@@ -49,9 +49,13 @@ message RollupDatapoint {
 	double sum = 6;
 	uint32 count = 7;
 	double variance = 8;
-	int32 nodeID = 9;
 }
 
 message MetricRollups {
     map<int32, RollupDatapoint> mostRecent = 1;
+}
+
+message NodeRollupDatapoint {
+	string nodeID = 1;
+	RollupDatapoint rollup = 2;
 }
