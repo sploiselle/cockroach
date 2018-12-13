@@ -44,11 +44,51 @@ import (
 type rollupRes int32
 
 const (
-	oneM rollupRes = 0
-	tenM rollupRes = 1
-	oneH rollupRes = 2
-	oneD rollupRes = 3
+	oneM    rollupRes = 0
+	tenM    rollupRes = 1
+	oneH    rollupRes = 2
+	twelveH rollupRes = 3
+	oneD    rollupRes = 4
 )
+
+type levelDetails struct {
+	res               rollupRes
+	childrenToRollup  int
+	targetRollupCount int
+}
+
+var oneMinuteLevelDetails = levelDetails{
+	res:               oneM,
+	childrenToRollup:  0,
+	targetRollupCount: 6,
+}
+
+var tenMinuteLevellDetails = levelDetails{
+	res:               tenM,
+	childrenToRollup:  10,
+	targetRollupCount: 6 * 10,
+}
+
+var oneHourLevellDetails = levelDetails{
+	res:               oneH,
+	childrenToRollup:  6,
+	targetRollupCount: 6 * 10 * 6,
+}
+
+var twelveHourLevellDetails = levelDetails{
+	res:               twelveH,
+	childrenToRollup:  12,
+	targetRollupCount: 6 * 10 * 6 * 12,
+}
+
+var oneDayLevellDetails = levelDetails{
+	res:               oneD,
+	childrenToRollup:  2,
+	targetRollupCount: 6 * 10 * 6 * 12 * 2,
+}
+
+// Track 1440 of these to keep all data
+type rollupPerLevel map[rollupRes]
 
 type validatedData struct {
 	valid  bool
@@ -95,8 +135,10 @@ var oneDayLevel = Level{
 }
 
 type MetricDetails struct {
-	levels   [4]Level
-	metadata metric.Metadata
+	levels           [4]Level
+	rollups          *ring.Ring // will be 1440 long ring
+	currentRollupPos *ring.Ring
+	metadata         metric.Metadata
 }
 
 type Monitor struct {
@@ -204,13 +246,27 @@ func addMetric(metricName string, metadata metric.Metadata, metrics map[string]*
 
 	newMetric := MetricDetails{
 		levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
+		rollups:  ring.New(1440),
 		metadata: metadata,
 	}
+
+	// Fill in rollups per level
+	for i := 0; i < 1440; i++ {
+		rpl := make(rollupPerLevel)
+
+		// Fill in map with values from the enum
+		for j := 0; j < 5; j++ {
+			rpl[j] = rollupDatapoint{}
+		}
+		newMetric.rollups.Value = rpl
+		newMetric.rollups = newMetric.rollups.Next()
+	}
+
+	newMetric.currentRollupPos = newMetric.rollups
 
 	for i, level := range newMetric.levels {
 		newMetric.levels[i].dataRing = ring.New(level.bufferLen)
 		newMetric.levels[i].currentBufferPos = newMetric.levels[i].dataRing
-
 	}
 	metrics[metricName] = &newMetric
 }
@@ -506,7 +562,7 @@ func sigDifInRollupGroup(rollups []rollupDatapoint) []rollupDatapoint {
 	return sigDifRollups
 }
 
-func converttspbRollup(t tspb.RollupDatapoint) rollupDatapoint {
+func converttspbRollupToMetricRollup(t tspb.RollupDatapoint) rollupDatapoint {
 	return rollupDatapoint{
 		timestampNanos: t.TimestampNanos,
 		first:          t.First,
@@ -518,6 +574,101 @@ func converttspbRollup(t tspb.RollupDatapoint) rollupDatapoint {
 		variance:       t.Variance,
 	}
 }
+
+func convertMetricRollupTotspbRollup(r rollupDatapoint)  tspb.RollupDatapoint {
+	return tspb.RollupDatapoint{
+		timestampNanos: r.TimestampNanos,
+		first:          r.First,
+		last:           r.Last,
+		min:            r.Min,
+		max:            r.Max,
+		sum:            r.Sum,
+		count:          r.Count,
+		variance:       r.Variance,
+	}
+}
+
+func (m *Monitor) insertRollup(mdt *MetricDetails, newData validatedData, level rollupRes, mn string) {
+	mdt.currentRollupPos.Value.(rollupPerLevel)[oneM] = newData.rollup
+	generateRollupAtLevel(tenMinuteLevellDetails)
+	generateRollupAtLevel(oneHourLevellDetails)
+	generateRollupAtLevel(twelveHourLevellDetails)
+	generateRollupAtLevel(oneDayLevellDetails)
+
+}
+
+func (mdt *MetricDetails) generateRollupAtLevel(ld levelDetails) {
+	var rollupsToCompress []rollupDatapoint
+	cursor := mdt.currentRollupPos
+	for i := 0; i < ld.childrenToRollup; i++ {
+		rollupsToCompress = append(rollupsToCompress, cursor.Value.(rollupPerLevel)[ld.res-1])
+		cursor = cursor.Prev()
+	}
+	rdp := compressRollupDatapoints(rollupsToCompress)
+	mdt.currentRollupPos.Value.(rollupPerLevel)[ld.res] = rdp
+}
+
+func (m *Monitor) gossipAllRollups(mn string) error {
+	rollups := tspb.MetricRollups{}
+	rollups.MostRecent = make(map[int32]*tspb.RollupDatapoint)
+	thisNodeID := strconv.Itoa(int(m.nodeID))
+	writeGossipMetricKey := gossip.MakeKey("anomalyAll", mn, thisNodeID)
+	currentGossipRollups, err := m.g.GetInfo(writeGossipMetricKey)
+
+	if err != nil {
+		return err
+	}
+
+	if err = protoutil.Unmarshal(currentGossipRollups, &rollups); err != nil {
+		return errors.Wrapf(err, "failed to gossip new rollup for %q", mn)
+	}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+	
+
+	var dataToGossip tspb.RollupDatapoint
+
+	if newData.valid {
+		dataToGossip = tspb.RollupDatapoint{
+			TimestampNanos: newData.rollup.timestampNanos,
+			First:          newData.rollup.first,
+			Last:           newData.rollup.last,
+			Min:            newData.rollup.min,
+			Max:            newData.rollup.max,
+			Sum:            newData.rollup.sum,
+			Count:          newData.rollup.count,
+			Variance:       newData.rollup.variance,
+		}
+	}
+
+	rollups.MostRecent[int32(level)] = &dataToGossip
+
+	m.g.AddInfoProto(writeGossipMetricKey, &rollups, 4*time.Minute)
+
+	return nil
+}
+
 
 func (m *Monitor) addDataToLevel(mdt *MetricDetails, newData validatedData, level rollupRes, mn string) {
 

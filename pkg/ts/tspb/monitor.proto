@@ -37,7 +37,8 @@ enum RollupRes {
 	oneM = 0;
 	tenM = 1;
 	oneH = 2;
-	oneD = 3;
+	twelveH = 3;
+	oneD = 4;
   }
 
 message RollupDatapoint {
