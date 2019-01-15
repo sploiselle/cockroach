@@ -953,7 +953,7 @@ func verifyDownsampler(downsampler tspb.TimeSeriesQueryAggregator) error {
 }
 
 // If you send a request for 1 minute worth of metrics it's inclusive of the final period
-// e.g. [11:00:00,11:01:00),[11:01:00,11:01:10), which generates an unexpected "extra" element.
+// e.g. [11:13:00,11:14:00),[11:14:00,11:14:10), which generates an unexpected "extra" element.
 // If you attempt to solve this by decrementing the QueryTimespan by 1ns, you instead end up with
 // ugly normalized timestamps. This function provides the option of simply lopping off the final
 // element.

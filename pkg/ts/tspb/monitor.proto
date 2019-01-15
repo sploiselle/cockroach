@@ -33,30 +33,35 @@ syntax = "proto3";
 
 package tspb;
 
+import "gogoproto/gogo.proto";
+
 enum RollupRes {
-	oneM = 0;
-	tenM = 1;
-	oneH = 2;
-	twelveH = 3;
-	oneD = 4;
+	invalid = 0;
+	oneM = 1;
+	tenM = 2;
+	oneH = 3;
+	twelveH = 4;
+	oneD = 5;
+	oneW = 6;
+	stopper = 7;
   }
 
 message RollupDatapoint {
-	int64   timestampNanos = 1;
-	double first = 2;
-	double last = 3;     
-    double min = 4; 
-	double max = 5;
-	double sum = 6;
-	uint32 count = 7;
-	double variance = 8;
+	double first = 1;
+	double last = 2;     
+    double min = 3; 
+	double max = 4;
+	double sum = 5;
+	uint32 count = 6;
+	double variance = 7;
 }
 
-message MetricRollups {
-    map<int32, RollupDatapoint> mostRecent = 1;
+message RollupCol {
+	int64   timestampNanos = 1;
+	repeated RollupDatapoint values = 2 [(gogoproto.nullable) = false];
 }
 
 message NodeRollupDatapoint {
 	string nodeID = 1;
-	RollupDatapoint rollup = 2;
+	RollupCol rollup = 2;
 }

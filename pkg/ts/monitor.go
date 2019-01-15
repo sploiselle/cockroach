@@ -16,13 +16,14 @@
 // How to make QueryMemoryContext?
 // How to bring in context?
 
+// TODO:
+// Propagate node ID all the way through Tukey analysis
+
 package ts
 
 import (
-	"container/ring"
 	"context"
 	"fmt"
-	"log"
 	"math"
 	"regexp"
 	"strconv"
@@ -41,112 +42,146 @@ import (
 	prometheusgo "github.com/prometheus/client_model/go"
 )
 
-type rollupRes int32
+// type rollupRes int32
 
-const (
-	oneM    rollupRes = 0
-	tenM    rollupRes = 1
-	oneH    rollupRes = 2
-	twelveH rollupRes = 3
-	oneD    rollupRes = 4
-)
+// const (
+// 	oneM             rollupRes = 0
+// 	tenM             rollupRes = 1
+// 	oneH             rollupRes = 2
+// 	twelveH          rollupRes = 3
+// 	oneD             rollupRes = 4
+// 	oneW             rollupRes = 5
+// 	rollupResStopper rollupRes = 6
+// )
 
 type levelDetails struct {
-	res               rollupRes
-	childrenToRollup  int
+	res tspb.RollupRes
+	// childrenToRollup   int
+	// childrenSkipFactor int
 	targetRollupCount int
+	rollupForParent   int
+	parentSkipFactor  int
 }
 
-var oneMinuteLevelDetails = levelDetails{
-	res:               oneM,
-	childrenToRollup:  0,
-	targetRollupCount: 6,
+var levels = map[tspb.RollupRes]levelDetails{
+	tspb.RollupRes_oneM: levelDetails{
+		res:               tspb.RollupRes_oneM,
+		targetRollupCount: 6,
+		rollupForParent:   10,
+		parentSkipFactor:  1,
+	},
+	tspb.RollupRes_tenM: levelDetails{
+		res: tspb.RollupRes_tenM,
+		// childrenToRollup:   10,
+		// childrenSkipFactor: 1,
+		targetRollupCount: 6 * 10,
+		rollupForParent:   6,
+		parentSkipFactor:  10,
+	},
+	tspb.RollupRes_oneH: levelDetails{
+		res: tspb.RollupRes_oneH,
+		// childrenToRollup:   6,
+		// childrenSkipFactor: 10,
+		targetRollupCount: 6 * 10 * 6,
+		rollupForParent:   12,
+		parentSkipFactor:  6 * 10,
+	},
+	tspb.RollupRes_twelveH: levelDetails{
+		res: tspb.RollupRes_twelveH,
+		// childrenToRollup:   12,
+		// childrenSkipFactor: 10 * 6,
+		targetRollupCount: 6 * 10 * 6 * 12,
+		rollupForParent:   2,
+		parentSkipFactor:  6 * 10 * 12,
+	},
+	tspb.RollupRes_oneD: levelDetails{
+		res: tspb.RollupRes_oneD,
+		// childrenToRollup:   2,
+		// childrenSkipFactor: 10 * 6 * 12,
+		targetRollupCount: 6 * 10 * 6 * 12 * 2,
+		rollupForParent:   7,
+		parentSkipFactor:  10 * 6 * 12 * 2,
+	},
+	tspb.RollupRes_oneW: levelDetails{
+		res: tspb.RollupRes_oneW,
+		// childrenToRollup:   2,
+		// childrenSkipFactor: 10 * 6 * 12 * 2,
+		targetRollupCount: 6 * 10 * 6 * 12 * 2,
+	},
 }
 
-var tenMinuteLevellDetails = levelDetails{
-	res:               tenM,
-	childrenToRollup:  10,
-	targetRollupCount: 6 * 10,
+// var oneMinuteLevelDetails = levelDetails{
+// 	res:               tspb.RollupRes_oneM,
+// 	targetRollupCount: 6,
+// }
+
+// var tenMinuteLevellDetails = levelDetails{
+// 	res:                tspb.RollupRes_tenM,
+// 	childrenToRollup:   10,
+// 	childrenSkipFactor: 1,
+// 	targetRollupCount:  6 * 10,
+// }
+
+// var oneHourLevellDetails = levelDetails{
+// 	res:                tspb.RollupRes_oneH,
+// 	childrenToRollup:   6,
+// 	childrenSkipFactor: 10,
+// 	targetRollupCount:  6 * 10 * 6,
+// }
+
+// var twelveHourLevellDetails = levelDetails{
+// 	res:                tspb.RollupRes_twelveH,
+// 	childrenToRollup:   12,
+// 	childrenSkipFactor: 10 * 6,
+// 	targetRollupCount:  6 * 10 * 6 * 12,
+// }
+
+// var oneDayLevellDetails = levelDetails{
+// 	res:                tspb.RollupRes_oneD,
+// 	childrenToRollup:   2,
+// 	childrenSkipFactor: 10 * 6 * 12,
+// 	targetRollupCount:  6 * 10 * 6 * 12 * 2,
+// }
+
+// var oneWeekLevellDetails = levelDetails{
+// 	res:                tspb.RollupRes_oneW,
+// 	childrenToRollup:   2,
+// 	childrenSkipFactor: 10 * 6 * 12 * 2,
+// 	targetRollupCount:  6 * 10 * 6 * 12 * 2,
+// }
+
+const numOfCols int = 10080
+
+// 10080 rows; one for each minute in the week
+type rollupTable [numOfCols]tspb.RollupCol
+
+type FVal struct {
+	Observed     float64
+	Target       float64
+	AtResolution tspb.RollupRes
 }
 
-var oneHourLevellDetails = levelDetails{
-	res:               oneH,
-	childrenToRollup:  6,
-	targetRollupCount: 6 * 10 * 6,
-}
-
-var twelveHourLevellDetails = levelDetails{
-	res:               twelveH,
-	childrenToRollup:  12,
-	targetRollupCount: 6 * 10 * 6 * 12,
-}
-
-var oneDayLevellDetails = levelDetails{
-	res:               oneD,
-	childrenToRollup:  2,
-	targetRollupCount: 6 * 10 * 6 * 12 * 2,
-}
-
-// Track 1440 of these to keep all data
-type rollupPerLevel map[rollupRes]
-
-type validatedData struct {
-	valid  bool
-	rollup rollupDatapoint
-}
-
-type Level struct {
-	res                   rollupRes
-	dataRing              *ring.Ring
-	bufferLen             int
-	compressionPeriod     int // bufferLen + 1; disabled by 0
-	currentBufferPos      *ring.Ring
-	currentCompressionPos int
-	targetRollupCount     int // the target count of each rollup in the ring
-	mostRecentTSNanos     int64
-}
-
-var oneMinuteLevel = Level{
-	res:               oneM,
-	bufferLen:         11,
-	compressionPeriod: 10,
-	targetRollupCount: 6,
-}
-
-var tenMinuteLevel = Level{
-	res:               tenM,
-	bufferLen:         7,
-	compressionPeriod: 6,
-	targetRollupCount: 6 * 10,
-}
-
-var oneHourLevel = Level{
-	res:               oneH,
-	bufferLen:         25,
-	compressionPeriod: 24,
-	targetRollupCount: 6 * 10 * 6,
-}
-
-var oneDayLevel = Level{
-	res:               oneD,
-	bufferLen:         8,
-	compressionPeriod: 0,
-	targetRollupCount: 6 * 10 * 6 * 24,
-}
+type FValTable [numOfCols]FVal
 
 type MetricDetails struct {
-	levels           [4]Level
-	rollups          *ring.Ring // will be 1440 long ring
-	currentRollupPos *ring.Ring
-	metadata         metric.Metadata
+	rollups           rollupTable
+	FVals             FValTable
+	mostRecentTSNanos int64
+	currentTablePos   int
+	metadata          metric.Metadata
 }
 
 type Monitor struct {
 	nodeID  roachpb.NodeID
 	db      *DB
 	g       *gossip.Gossip
-	metrics map[string]*MetricDetails
+	Metrics map[string]*MetricDetails
 	mem     QueryMemoryContext
+}
+
+type validatedData struct {
+	valid  bool
+	rollup tspb.RollupDatapoint
 }
 
 const (
@@ -190,7 +225,13 @@ func NewMonitor(
 
 	qmc := MakeQueryMemoryContext(&bytesMonitor, &bytesMonitor, memOpts)
 
-	metricsToMonitor := make(map[string]*MetricDetails)
+	monitor := Monitor{
+		nodeID,
+		db,
+		g,
+		make(map[string]*MetricDetails),
+		qmc,
+	}
 
 	for name, metadata := range md {
 		// Histograms are accessible only as 8 separate metrics; one for each quantile.
@@ -200,14 +241,14 @@ func NewMonitor(
 
 				matched, _ := regexp.MatchString(metricRegex, metadata.TimeseriesPrefix+name+quantile)
 				if matched {
-					addMetric(metadata.TimeseriesPrefix+name+quantile, metadata, metricsToMonitor)
+					monitor.addMetric(metadata.TimeseriesPrefix+name+quantile, metadata)
 				}
 			}
 		} else {
 
 			matched, _ := regexp.MatchString(metricRegex, metadata.TimeseriesPrefix+name)
 			if matched {
-				addMetric(metadata.TimeseriesPrefix+name, metadata, metricsToMonitor)
+				monitor.addMetric(metadata.TimeseriesPrefix+name, metadata)
 			}
 		}
 	}
@@ -215,60 +256,29 @@ func NewMonitor(
 	thisNodeID := strconv.Itoa(int(nodeID))
 
 	// Add all of these metrics to Gossip
-	for metricName := range metricsToMonitor {
+	for metricName := range monitor.Metrics {
 		gossipMetricKey := gossip.MakeKey("anomaly", metricName, thisNodeID)
 		fmt.Println("gossipMetricKey", gossipMetricKey)
-		mr := &tspb.MetricRollups{MostRecent: make(map[int32]*tspb.RollupDatapoint)}
 
-		mr.MostRecent[int32(oneM)] = &tspb.RollupDatapoint{}
-
-		err := g.AddInfoProto(gossipMetricKey, mr, 10*time.Minute)
+		err := g.AddInfoProto(gossipMetricKey, &tspb.RollupCol{}, 2*time.Minute)
 
 		if err != nil {
 			fmt.Printf("when adding %s to gossip, %s", metricName, err)
 		}
 	}
 
-	monitor := Monitor{
-		nodeID,
-		db,
-		g,
-		metricsToMonitor,
-		qmc,
-	}
-
-	fmt.Printf("Monitoring %d metrics\n", len(monitor.metrics))
+	fmt.Printf("Monitoring %d metrics\n", len(monitor.Metrics))
 
 	return &monitor
 }
 
-func addMetric(metricName string, metadata metric.Metadata, metrics map[string]*MetricDetails) {
+func (m Monitor) addMetric(metricName string, metadata metric.Metadata) {
 
 	newMetric := MetricDetails{
-		levels:   [4]Level{oneMinuteLevel, tenMinuteLevel, oneHourLevel, oneDayLevel},
-		rollups:  ring.New(1440),
 		metadata: metadata,
 	}
 
-	// Fill in rollups per level
-	for i := 0; i < 1440; i++ {
-		rpl := make(rollupPerLevel)
-
-		// Fill in map with values from the enum
-		for j := 0; j < 5; j++ {
-			rpl[j] = rollupDatapoint{}
-		}
-		newMetric.rollups.Value = rpl
-		newMetric.rollups = newMetric.rollups.Next()
-	}
-
-	newMetric.currentRollupPos = newMetric.rollups
-
-	for i, level := range newMetric.levels {
-		newMetric.levels[i].dataRing = ring.New(level.bufferLen)
-		newMetric.levels[i].currentBufferPos = newMetric.levels[i].dataRing
-	}
-	metrics[metricName] = &newMetric
+	m.Metrics[metricName] = &newMetric
 }
 
 func (m *Monitor) Start() {
@@ -283,14 +293,14 @@ func doEvery(d time.Duration, f func()) {
 
 func (m *Monitor) Query() {
 
-	for metricName, metricDetails := range m.metrics {
+	for metricName, metricDetails := range m.Metrics {
 
 		dataToAdd := validatedData{valid: true}
 
-		thisLevel := &metricDetails.levels[oneM]
+		// currentLevelDetails := levels[tspb.RollupRes_oneM]
 
 		var now, sKey, eKey int64
-		if thisLevel.mostRecentTSNanos == 0 {
+		if metricDetails.mostRecentTSNanos == 0 {
 			// time.Sleep(time.Second * 10)
 			// dataToAdd.valid = false // this lets us easily skip adding the data for the first period
 			now = timeutil.Now().UnixNano()
@@ -298,9 +308,11 @@ func (m *Monitor) Query() {
 			now = now - (now % OneMNanos)
 
 			sKey = now - OneMNanos
+			metricDetails.mostRecentTSNanos = sKey
 			eKey = now
 		} else {
-			sKey = thisLevel.mostRecentTSNanos + OneMNanos
+			sKey = metricDetails.mostRecentTSNanos + OneMNanos
+			metricDetails.mostRecentTSNanos = sKey
 			now = sKey + OneMNanos
 			eKey = now
 		}
@@ -330,19 +342,14 @@ func (m *Monitor) Query() {
 			}
 		}
 
-		agg := tspb.TimeSeriesQueryAggregator_AVG
-		der := tspb.TimeSeriesQueryDerivative_DERIVATIVE
-		noDer := tspb.TimeSeriesQueryDerivative_NONE
-
 		if metricDetails.metadata.MetricType != prometheusgo.MetricType_COUNTER {
 			measureDatapoints := make([]tspb.TimeSeriesDatapoint, 0)
 
 			measureQ := tspb.Query{
-				metricName,
-				&agg,
-				&agg,
-				&noDer,
-				[]string{""},
+				Name:             metricName,
+				Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+				SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+				Derivative:       tspb.TimeSeriesQueryDerivative_NONE.Enum(),
 			}
 
 			aggregateSpansToDatapoints(sourceSpans, measureQ, qts, Resolution10s.SampleDuration(), &measureDatapoints)
@@ -352,11 +359,10 @@ func (m *Monitor) Query() {
 		}
 
 		derQ := tspb.Query{
-			metricName,
-			&agg,
-			&agg,
-			&der,
-			[]string{""},
+			Name:             metricName,
+			Downsampler:      tspb.TimeSeriesQueryAggregator_AVG.Enum(),
+			SourceAggregator: tspb.TimeSeriesQueryAggregator_SUM.Enum(),
+			Derivative:       tspb.TimeSeriesQueryDerivative_NON_NEGATIVE_DERIVATIVE.Enum(),
 		}
 
 		derDatapoints := make([]tspb.TimeSeriesDatapoint, 0)
@@ -371,45 +377,66 @@ func (m *Monitor) Query() {
 
 		derRollup := computeRollupsFromData(tspb.TimeSeriesData{Name: metricName, Source: strconv.Itoa(int(m.nodeID)), Datapoints: derDatapoints}, qts.EndNanos-qts.StartNanos)
 
-		if len(derRollup.datapoints) > 1 {
-			compressedRollup := compressRollupDatapoints(derRollup.datapoints)
-			derRollup.datapoints = []rollupDatapoint{compressedRollup}
+		var dpToCompress []tspb.RollupDatapoint
+
+		// Convert from rollup to tspb.RollupDatapoint
+		for _, dp := range derRollup.datapoints {
+			dpToCompress = append(dpToCompress, convertMetricRollupToTspbRollup(dp))
 		}
 
-		// Invalidate data if it doesn't have at least 80% of its values
-		if len(derRollup.datapoints) < 1 {
-			dataToAdd = validatedData{
-				valid:  false,
-				rollup: rollupDatapoint{timestampNanos: sKey},
-			}
+		// var finalDatapoint tspb.RollupDatapoint
+
+		if len(dpToCompress) > 1 {
+			dataToAdd.rollup = compressRollupDatapoints(dpToCompress)
+		} else if len(dpToCompress) == 0 {
+			dataToAdd.valid = false
 		} else {
-			// I think this is could be moved up to the preceding if...
-			if derRollup.datapoints[0].count < 5 || !dataToAdd.valid {
-				dataToAdd = validatedData{
-					valid:  false,
-					rollup: rollupDatapoint{timestampNanos: sKey},
-				}
-			} else {
-				dataToAdd = validatedData{
-					valid:  true,
-					rollup: derRollup.datapoints[0],
-				}
-			}
+			dataToAdd.rollup = dpToCompress[0]
 		}
 
 		fmt.Printf("%s \n", metricName)
 		fmt.Println("\t", dataToAdd.valid)
 		fmt.Println("\t", dataToAdd.rollup)
 
-		m.gossipRollup(metricName, dataToAdd, oneM)
-		m.addDataToLevel(metricDetails, dataToAdd, oneM, metricName)
+		// m.gossipRollup(metricName, dataToAdd, oneM)
+		metricDetails.rollups[metricDetails.currentTablePos].TimestampNanos = metricDetails.mostRecentTSNanos
+		m.addDataToLevel(metricDetails, dataToAdd, tspb.RollupRes_oneM)
+		m.gossipRollup(metricDetails, metricName)
+		m.checkOtherNodes(metricName)
 	}
 	fmt.Println("----------------------------------------------------------------------")
 }
 
-func (m *Monitor) gossipRollup(mn string, newData validatedData, level rollupRes) error {
-	rollups := tspb.MetricRollups{}
-	rollups.MostRecent = make(map[int32]*tspb.RollupDatapoint)
+func (m *Monitor) addDataToLevel(mdt *MetricDetails, newData validatedData, level tspb.RollupRes) {
+	if level == tspb.RollupRes_stopper {
+		return
+	}
+
+	cl, ok := levels[level]
+	if !ok {
+		fmt.Println("addDataToLevel invalid level")
+	}
+
+	if newData.valid && newData.rollup.Count >= uint32(float32(cl.targetRollupCount)*.8) {
+		mdt.rollups[mdt.currentTablePos].Values[level] = newData.rollup
+	} else {
+		mdt.rollups[mdt.currentTablePos].Values[level] = tspb.RollupDatapoint{}
+	}
+
+	if cl.rollupForParent != 0 {
+		var dataToCompress []tspb.RollupDatapoint
+
+		for i := 0; i < cl.rollupForParent; i++ {
+			dataToCompress = append(dataToCompress, mdt.rollups[(mdt.currentTablePos-i*cl.parentSkipFactor)%numOfCols].Values[level])
+		}
+		compressedData := compressRollupDatapoints(dataToCompress)
+		m.addDataToLevel(mdt, validatedData{true, compressedData}, level+1)
+	}
+}
+
+func (m *Monitor) gossipRollup(mdt *MetricDetails, mn string) error {
+	// rollups := tspb.MetricRollups{}
+	// rollups.MostRecent = make(map[int32]*tspb.RollupDatapoint)
 	thisNodeID := strconv.Itoa(int(m.nodeID))
 	writeGossipMetricKey := gossip.MakeKey("anomaly", mn, thisNodeID)
 	currentGossipRollups, err := m.g.GetInfo(writeGossipMetricKey)
@@ -418,8 +445,10 @@ func (m *Monitor) gossipRollup(mn string, newData validatedData, level rollupRes
 		return err
 	}
 
-	if err = protoutil.Unmarshal(currentGossipRollups, &rollups); err != nil {
-		return errors.Wrapf(err, "failed to gossip new rollup for %q", mn)
+	dataToGossip := mdt.rollups[mdt.currentTablePos]
+
+	if err = protoutil.Unmarshal(currentGossipRollups, &dataToGossip); err != nil {
+		return errors.Wrapf(err, "failed to create Gossip value %q", mn)
 	}
 
 	// lastRollup, ok := rollups.MostRecent[int32(level)]
@@ -428,114 +457,160 @@ func (m *Monitor) gossipRollup(mn string, newData validatedData, level rollupRes
 	// 	fmt.Println("Time between this data and gossip is", (newData.rollup.timestampNanos-lastRollup.TimestampNanos)/int64(time.Second), "seconds")
 	// }
 
-	var dataToGossip tspb.RollupDatapoint
+	// var dataToGossip tspb.RollupDatapoint
 
-	if newData.valid {
-		dataToGossip = tspb.RollupDatapoint{
-			TimestampNanos: newData.rollup.timestampNanos,
-			First:          newData.rollup.first,
-			Last:           newData.rollup.last,
-			Min:            newData.rollup.min,
-			Max:            newData.rollup.max,
-			Sum:            newData.rollup.sum,
-			Count:          newData.rollup.count,
-			Variance:       newData.rollup.variance,
-		}
-	}
+	// if newData.valid {
+	// 	dataToGossip = tspb.RollupDatapoint{
+	// 		TimestampNanos: newData.rollup.timestampNanos,
+	// 		First:          newData.rollup.first,
+	// 		Last:           newData.rollup.last,
+	// 		Min:            newData.rollup.min,
+	// 		Max:            newData.rollup.max,
+	// 		Sum:            newData.rollup.sum,
+	// 		Count:          newData.rollup.count,
+	// 		Variance:       newData.rollup.variance,
+	// 	}
+	// }
 
-	rollups.MostRecent[int32(level)] = &dataToGossip
+	// rollups.MostRecent[int32(level)] = &dataToGossip
 
-	m.g.AddInfoProto(writeGossipMetricKey, &rollups, 4*time.Minute)
+	m.g.AddInfoProto(writeGossipMetricKey, &dataToGossip, 2*time.Minute)
 
 	return nil
 }
 
-func (m *Monitor) checkOtherNodes(mn string, level rollupRes, counter int, mostNodesSeen int) error {
-	if counter > 5 {
-		return nil
-	}
-	targetTimestamp := m.metrics[mn].levels[int(level)].mostRecentTSNanos
+func (m *Monitor) checkOtherNodes(mn string) error {
+
+	targetTimestamp := m.Metrics[mn].mostRecentTSNanos
 
 	readGossipRegex := gossip.MakeKey("anomaly", mn)
 
-	var allNodesDataFromSameRes []tspb.NodeRollupDatapoint
+	// var allNodesDataFromSameRes []tspb.NodeRollupDatapoint
+
+	// map[nodeID]tspb.RollupCol
+	allNodesDataFromSameTimestamp := make(map[string]tspb.RollupCol)
 
 	possibleNodes := 0
+	iterations := 0
 
-	if err := m.g.IterateInfos(readGossipRegex, func(key string, info gossip.Info) error {
+	// Aggregate all rollup columns you can
+	for {
+		possibleNodes = 0
 
-		fmt.Println("Key?", key)
-		possibleNodes++
+		if err := m.g.IterateInfos(readGossipRegex, func(key string, info gossip.Info) error {
 
-		nodeIDRegex := regexp.MustCompile(":(\\d+)$")
-		keyNodeIDMatches := nodeIDRegex.FindStringSubmatch(key)
-		if len(keyNodeIDMatches) > 1 {
-			keyNodeID := keyNodeIDMatches[1]
+			fmt.Println("Key?", key)
+			possibleNodes++
 
-			bytes, err := info.Value.GetBytes()
-			if err != nil {
-				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
-			}
+			nodeIDRegex := regexp.MustCompile(":(\\d+)$")
+			keyNodeIDMatches := nodeIDRegex.FindStringSubmatch(key)
 
-			var r tspb.MetricRollups
+			if len(keyNodeIDMatches) > 1 {
+				keyNodeID := keyNodeIDMatches[1]
 
-			if err := protoutil.Unmarshal(bytes, &r); err != nil {
-				return errors.Wrapf(err, "failed to parse value for key %q", key)
+				bytes, err := info.Value.GetBytes()
+				if err != nil {
+					return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+				}
 
-			}
+				var r tspb.RollupCol
 
-			rdp, ok := r.MostRecent[int32(level)]
+				if err := protoutil.Unmarshal(bytes, &r); err != nil {
+					return errors.Wrapf(err, "failed to parse value for key %q", key)
 
-			if ok {
-				if rdp.TimestampNanos == targetTimestamp && rdp.Count > 0 {
-					allNodesDataFromSameRes = append(allNodesDataFromSameRes, tspb.NodeRollupDatapoint{NodeID: keyNodeID, Rollup: rdp})
+				}
+
+				if r.TimestampNanos == targetTimestamp {
+					allNodesDataFromSameTimestamp[keyNodeID] = r
 				}
 			}
+
+			return nil
+		}); err != nil {
+			return err
 		}
 
-		return nil
-	}); err != nil {
-		return err
-	}
+		iterations++
 
-	fmt.Println("GOSSIP ROLLUPS????", allNodesDataFromSameRes)
-
-	// Wait for more Gossips if you don't have 2
-	// or if you don't have them all and it looks like more are still coming in
-	if len(allNodesDataFromSameRes) < 2 || (len(allNodesDataFromSameRes) < possibleNodes && len(allNodesDataFromSameRes) > mostNodesSeen) {
-		go func() {
-			fmt.Println("Waiting for better data to come into gossip")
+		// Iterate over all of the Gossipped info to find what you need until:
+		// You've checked 4 times
+		// You have all of the possible nodes' worth of data
+		if iterations < 5 || len(allNodesDataFromSameTimestamp) < possibleNodes {
+			// wait 5 seconds and repeat
 			time.Sleep(5 * time.Second)
-			counter++
-			m.checkOtherNodes(mn, level, counter, len(allNodesDataFromSameRes))
-		}()
-	} else {
-
-		var rollupsToProcess []rollupDatapoint
-
-		for _, d := range allNodesDataFromSameRes {
-			rollupsToProcess = append(rollupsToProcess, converttspbRollup(*d.Rollup))
-		}
-
-		log.Printf("Checking %d nodes' %s stats", len(rollupsToProcess), mn)
-
-		anovaRollups := sigDifInRollupGroup(rollupsToProcess)
-
-		if len(anovaRollups) > 1 {
-			anovaPass05 := passesAnova(0.05, anovaRollups)
-
-			if !anovaPass05 {
-				log.Printf(
-					"!!!WARNING!!! %d nodes have different %s readings at %d\n",
-					len(allNodesDataFromSameRes),
-					mn,
-					time.Unix(0, targetTimestamp),
-				)
-			}
+		} else {
+			break
 		}
 	}
+
+	fmt.Println("GOSSIP ROLLUPS????", allNodesDataFromSameTimestamp)
+
+	// TODO! NEED TO CALL COMPARE ROLLUPS
+	currentPos := m.Metrics[mn].currentTablePos
+	m.Metrics[mn].FVals[currentPos] = compareRollupCols(allNodesDataFromSameTimestamp, mn)
 
 	return nil
+}
+
+// This is a good place to return the F-value we want to write
+func compareRollupCols(cols map[string]tspb.RollupCol, mn string) FVal {
+
+	fValsAtEachRes := make(map[tspb.RollupRes]FVal)
+
+	// [resoltuion][rollupdatDataPoint from node]
+	dpsFromEachRes := make([][]rollupDatapoint, tspb.RollupRes_stopper)
+
+	for i := range dpsFromEachRes {
+		dpsFromEachRes[i] = make([]rollupDatapoint, len(cols))
+	}
+
+	for _, col := range cols {
+		for res, val := range col.Values {
+			dpsFromEachRes[res] = append(dpsFromEachRes[res], converttspbRollupToMetricRollup(val))
+		}
+	}
+
+	var fValToWrite FVal
+	// RANGE OVER THE LEFT DIM OF THE TABLE
+	for res, rollupsToProcess := range dpsFromEachRes {
+		fValToWrite = anova(0.05, rollupsToProcess)
+		fValToWrite.AtResolution = tspb.RollupRes(res)
+		fValsAtEachRes[fValToWrite.AtResolution] = fValToWrite
+	}
+
+	var worstFVal FVal
+
+	for res, fval := range fValsAtEachRes {
+		if fval.Observed/fval.Target > worstFVal.Observed/worstFVal.Target {
+			worstFVal = fval
+			worstFVal.AtResolution = res
+		}
+	}
+	return worstFVal
+
+	// // var rollupsToProcess []rollupDatapoint
+
+	// for _, d := range allNodesDataFromSameTimestamp {
+	// 	rollupsToProcess = append(rollupsToProcess, converttspbRollupToMetricRollup(*d.Rollup))
+	// }
+
+	// log.Printf("Checking %d nodes' %s stats", len(rollupsToProcess), mn)
+
+	// anovaRollups := sigDifInRollupGroup(rollupsToProcess)
+
+	// if len(anovaRollups) > 1 {
+	// 	anovaPass05 := passesAnova(0.05, anovaRollups)
+
+	// 	if !anovaPass05 {
+	// 		log.Printf(
+	// 			"!!!WARNING!!! %d nodes have different %s readings at %d\n",
+	// 			len(allNodesDataFromSameRes),
+	// 			mn,
+	// 			time.Unix(0, targetTimestamp),
+	// 		)
+	// 	}
+	// }
+
 }
 
 func sigDifInRollupGroup(rollups []rollupDatapoint) []rollupDatapoint {
@@ -564,197 +639,84 @@ func sigDifInRollupGroup(rollups []rollupDatapoint) []rollupDatapoint {
 
 func converttspbRollupToMetricRollup(t tspb.RollupDatapoint) rollupDatapoint {
 	return rollupDatapoint{
-		timestampNanos: t.TimestampNanos,
-		first:          t.First,
-		last:           t.Last,
-		min:            t.Min,
-		max:            t.Max,
-		sum:            t.Sum,
-		count:          t.Count,
-		variance:       t.Variance,
+		first:    t.First,
+		last:     t.Last,
+		min:      t.Min,
+		max:      t.Max,
+		sum:      t.Sum,
+		count:    t.Count,
+		variance: t.Variance,
 	}
 }
 
-func convertMetricRollupTotspbRollup(r rollupDatapoint)  tspb.RollupDatapoint {
+func convertMetricRollupToTspbRollup(m rollupDatapoint) tspb.RollupDatapoint {
 	return tspb.RollupDatapoint{
-		timestampNanos: r.TimestampNanos,
-		first:          r.First,
-		last:           r.Last,
-		min:            r.Min,
-		max:            r.Max,
-		sum:            r.Sum,
-		count:          r.Count,
-		variance:       r.Variance,
+		First:    m.first,
+		Last:     m.last,
+		Min:      m.min,
+		Max:      m.max,
+		Sum:      m.sum,
+		Count:    m.count,
+		Variance: m.variance,
 	}
 }
 
-func (m *Monitor) insertRollup(mdt *MetricDetails, newData validatedData, level rollupRes, mn string) {
-	mdt.currentRollupPos.Value.(rollupPerLevel)[oneM] = newData.rollup
-	generateRollupAtLevel(tenMinuteLevellDetails)
-	generateRollupAtLevel(oneHourLevellDetails)
-	generateRollupAtLevel(twelveHourLevellDetails)
-	generateRollupAtLevel(oneDayLevellDetails)
+// func (m *Monitor) insertRollup(mdt *MetricDetails, newData validatedData, level rollupRes, mn string) {
+// 	mdt.currentRollupPos.Value.(rollupPerLevel)[oneM] = newData.rollup
+// 	generateRollupAtLevel(tenMinuteLevellDetails)
+// 	generateRollupAtLevel(oneHourLevellDetails)
+// 	generateRollupAtLevel(twelveHourLevellDetails)
+// 	generateRollupAtLevel(oneDayLevellDetails)
 
-}
+// }
 
-func (mdt *MetricDetails) generateRollupAtLevel(ld levelDetails) {
-	var rollupsToCompress []rollupDatapoint
-	cursor := mdt.currentRollupPos
-	for i := 0; i < ld.childrenToRollup; i++ {
-		rollupsToCompress = append(rollupsToCompress, cursor.Value.(rollupPerLevel)[ld.res-1])
-		cursor = cursor.Prev()
-	}
-	rdp := compressRollupDatapoints(rollupsToCompress)
-	mdt.currentRollupPos.Value.(rollupPerLevel)[ld.res] = rdp
-}
+// func (mdt *MetricDetails) generateRollupAtLevel(ld levelDetails) {
+// 	var rollupsToCompress []rollupDatapoint
+// 	cursor := mdt.currentRollupPos
+// 	for i := 0; i < ld.childrenToRollup; i++ {
+// 		rollupsToCompress = append(rollupsToCompress, cursor.Value.(rollupPerLevel)[ld.res-1])
+// 		cursor = cursor.Prev()
+// 	}
+// 	rdp := compressRollupDatapoints(rollupsToCompress)
+// 	mdt.currentRollupPos.Value.(rollupPerLevel)[ld.res] = rdp
+// }
 
-func (m *Monitor) gossipAllRollups(mn string) error {
-	rollups := tspb.MetricRollups{}
-	rollups.MostRecent = make(map[int32]*tspb.RollupDatapoint)
-	thisNodeID := strconv.Itoa(int(m.nodeID))
-	writeGossipMetricKey := gossip.MakeKey("anomalyAll", mn, thisNodeID)
-	currentGossipRollups, err := m.g.GetInfo(writeGossipMetricKey)
+// func (m *Monitor) gossipAllRollups(mn string) error {
+// 	rollups := tspb.MetricRollups{}
+// 	rollups.MostRecent = make(map[int32]*tspb.RollupDatapoint)
+// 	thisNodeID := strconv.Itoa(int(m.nodeID))
+// 	writeGossipMetricKey := gossip.MakeKey("anomalyAll", mn, thisNodeID)
+// 	currentGossipRollups, err := m.g.GetInfo(writeGossipMetricKey)
 
-	if err != nil {
-		return err
-	}
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if err = protoutil.Unmarshal(currentGossipRollups, &rollups); err != nil {
-		return errors.Wrapf(err, "failed to gossip new rollup for %q", mn)
-	}
+// 	if err = protoutil.Unmarshal(currentGossipRollups, &rollups); err != nil {
+// 		return errors.Wrapf(err, "failed to gossip new rollup for %q", mn)
+// 	}
 
+// 	var dataToGossip tspb.RollupDatapoint
 
+// 	if newData.valid {
+// 		dataToGossip = tspb.RollupDatapoint{
+// 			TimestampNanos: newData.rollup.timestampNanos,
+// 			First:          newData.rollup.first,
+// 			Last:           newData.rollup.last,
+// 			Min:            newData.rollup.min,
+// 			Max:            newData.rollup.max,
+// 			Sum:            newData.rollup.sum,
+// 			Count:          newData.rollup.count,
+// 			Variance:       newData.rollup.variance,
+// 		}
+// 	}
 
+// 	rollups.MostRecent[int32(level)] = &dataToGossip
 
+// 	m.g.AddInfoProto(writeGossipMetricKey, &rollups, 4*time.Minute)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-	
-
-	var dataToGossip tspb.RollupDatapoint
-
-	if newData.valid {
-		dataToGossip = tspb.RollupDatapoint{
-			TimestampNanos: newData.rollup.timestampNanos,
-			First:          newData.rollup.first,
-			Last:           newData.rollup.last,
-			Min:            newData.rollup.min,
-			Max:            newData.rollup.max,
-			Sum:            newData.rollup.sum,
-			Count:          newData.rollup.count,
-			Variance:       newData.rollup.variance,
-		}
-	}
-
-	rollups.MostRecent[int32(level)] = &dataToGossip
-
-	m.g.AddInfoProto(writeGossipMetricKey, &rollups, 4*time.Minute)
-
-	return nil
-}
-
-
-func (m *Monitor) addDataToLevel(mdt *MetricDetails, newData validatedData, level rollupRes, mn string) {
-
-	thisLevel := &mdt.levels[level]
-	thisLevel.currentBufferPos.Value = newData
-
-	// Oldest data is one to the right
-	if thisLevel.currentBufferPos.Next().Value != nil {
-		oldestRingData := thisLevel.currentBufferPos.Next().Value.(validatedData)
-		if oldestRingData.valid && newData.valid {
-			dataToTest := []rollupDatapoint{newData.rollup, oldestRingData.rollup}
-			insigDif := passSigDif(0.05, dataToTest)
-			if !insigDif {
-				anovaPass05 := passesAnova(0.05, dataToTest)
-				if !anovaPass05 {
-					m.checkOtherNodes(mn, level, 0, 0)
-				}
-			}
-		}
-	}
-
-	thisLevel.currentCompressionPos = (thisLevel.currentCompressionPos + 1) % thisLevel.compressionPeriod
-	if thisLevel.currentCompressionPos == 0 && thisLevel.compressionPeriod != 0 {
-		dataToAdd := mdt.compressData(thisLevel)
-
-		// If not 80% of this period's data, then invalidate
-		if dataToAdd.rollup.count < uint32(0.8*float32(thisLevel.compressionPeriod*thisLevel.targetRollupCount)) {
-			dataToAdd.valid = false
-			dataToAdd.rollup = rollupDatapoint{}
-		}
-		nextRes := rollupRes(int(level) + 1)
-		m.gossipRollup(mn, dataToAdd, nextRes)
-		m.addDataToLevel(mdt, dataToAdd, nextRes, mn)
-		m.checkOtherNodes(mn, nextRes, 0, 0)
-	}
-
-	thisLevel.mostRecentTSNanos = newData.rollup.timestampNanos
-	fmt.Println("\tthisLevel", thisLevel)
-	// thisLevel.currentBufferPos.Do(func(p interface{}) {
-	// 	if p != nil {
-	// 		fmt.Println("ring val ", thisLevel.res, p.(validatedData))
-	// 	}
-	// })
-
-	thisLevel.currentBufferPos = thisLevel.currentBufferPos.Next()
-}
-
-func (mdt *MetricDetails) compressData(level *Level) validatedData {
-	var datapointsToCompress []rollupDatapoint
-
-	ringCursor := level.currentBufferPos
-	for i := 0; i < level.compressionPeriod; i++ {
-		if ringCursor.Value != nil {
-			if ringCursor.Value.(validatedData).valid {
-				datapointsToCompress = append(datapointsToCompress, ringCursor.Value.(validatedData).rollup)
-			}
-		}
-
-		ringCursor = ringCursor.Prev()
-	}
-
-	var dataToAdd validatedData
-	if len(datapointsToCompress) > 0 {
-		compressedData := compressRollupDatapoints(datapointsToCompress)
-		dataToAdd = validatedData{
-			valid:  true,
-			rollup: compressedData,
-		}
-	} else {
-
-		var oldestTimestamp int64
-		// ringCursor ends up one past the "end" of the compression period
-		if ringCursor.Next().Value != nil {
-			oldestTimestamp = ringCursor.Next().Value.(validatedData).rollup.timestampNanos
-		}
-
-		dataToAdd = validatedData{
-			valid: false,
-			rollup: rollupDatapoint{
-				timestampNanos: oldestTimestamp,
-			},
-		}
-	}
-
-	return dataToAdd
-}
+// 	return nil
+// }
 
 func passSigDif(fp float64, stats []rollupDatapoint) bool {
 	var zTarget float64
@@ -804,8 +766,11 @@ type anovaVals struct {
 	ssb anovaRow
 }
 
-func passesAnova(fp float32, stats []rollupDatapoint) bool {
+// func passesAnova(fp float32, stats []rollupDatapoint) bool {
 
+func anova(fp float32, stats []rollupDatapoint) FVal {
+
+	var retVal FVal
 	fmt.Printf("anova between %v", time.Unix(0, stats[0].timestampNanos))
 
 	subsetsStats := make([]anovaElement, len(stats))
@@ -853,7 +818,8 @@ func passesAnova(fp float32, stats []rollupDatapoint) bool {
 	if msw == 0 {
 		msw = 1
 	}
-	fResult := msb / msw
+	retVal.Observed = msb / msw
+	// fResult := msb / msw
 
 	// fmt.Println("fResult", fResult)
 
@@ -863,30 +829,32 @@ func passesAnova(fp float32, stats []rollupDatapoint) bool {
 			an05row = F05[200]
 		}
 
-		an05val := an05row[int(ssb.df)-1]
+		retVal.Target = an05row[int(ssb.df)-1]
+		// an05val := an05row[int(ssb.df)-1]
 
 		// fmt.Println("an05val", an05val)
 
-		if fResult > an05val {
-			if len(stats) < 3 {
-				return false
-			}
-		}
+		// if fResult > an05val {
+		// 	if len(stats) < 3 {
+		// 		return false
+		// 	}
+		// }
 	} else {
 		an01row, ok := F01[int(ssw.df)]
 		if !ok {
 			an01row = F01[200]
 		}
 
-		an01val := an01row[int(ssb.df)-1]
+		retVal.Target = an01row[int(ssb.df)-1]
+		// an01val := an01row[int(ssb.df)-1]
 
-		if fResult > an01val {
-			return false
-			// return tukey(0.01, msw, int(ssw.df), int(ssb.df), ns)
-		}
+		// if fResult > an01val {
+		// 	return false
+		// 	// return tukey(0.01, msw, int(ssw.df), int(ssb.df), ns)
+		// }
 	}
 
-	return true
+	return retVal
 }
 
 func calculateSuperSet(ae []anovaElement) anovaElement {
@@ -935,3 +903,89 @@ func calculateSuperSet(ae []anovaElement) anovaElement {
 
 	return ssStats
 }
+
+// 	m.Metrics[mdt.]
+
+// 	currentLevel := &mdt.levels[level]
+// 	currentLevel.currentBufferPos.Value = newData
+
+// 	// Oldest data is one to the right
+// 	if currentLevel.currentBufferPos.Next().Value != nil {
+// 		oldestRingData := currentLevel.currentBufferPos.Next().Value.(validatedData)
+// 		if oldestRingData.valid && newData.valid {
+// 			dataToTest := []rollupDatapoint{newData.rollup, oldestRingData.rollup}
+// 			insigDif := passSigDif(0.05, dataToTest)
+// 			if !insigDif {
+// 				anovaPass05 := passesAnova(0.05, dataToTest)
+// 				if !anovaPass05 {
+// 					m.checkOtherNodes(mn, level, 0, 0)
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	currentLevel.currentCompressionPos = (currentLevel.currentCompressionPos + 1) % currentLevel.compressionPeriod
+// 	if currentLevel.currentCompressionPos == 0 && currentLevel.compressionPeriod != 0 {
+// 		dataToAdd := mdt.compressData(currentLevel)
+
+// 		// If not 80% of this period's data, then invalidate
+// 		if dataToAdd.rollup.count < uint32(0.8*float32(currentLevel.compressionPeriod*currentLevel.targetRollupCount)) {
+// 			dataToAdd.valid = false
+// 			dataToAdd.rollup = rollupDatapoint{}
+// 		}
+// 		nextRes := rollupRes(int(level) + 1)
+// 		m.gossipRollup(mn, dataToAdd, nextRes)
+// 		m.addDataToLevel(mdt, dataToAdd, nextRes, mn)
+// 		m.checkOtherNodes(mn, nextRes, 0, 0)
+// 	}
+
+// 	currentLevel.mostRecentTSNanos = newData.rollup.timestampNanos
+// 	fmt.Println("\tcurrentLevel", currentLevel)
+// 	// currentLevel.currentBufferPos.Do(func(p interface{}) {
+// 	// 	if p != nil {
+// 	// 		fmt.Println("ring val ", currentLevel.res, p.(validatedData))
+// 	// 	}
+// 	// })
+
+// 	currentLevel.currentBufferPos = currentLevel.currentBufferPos.Next()
+// }
+
+// func (mdt *MetricDetails) compressData(level *Level) validatedData {
+// 	var datapointsToCompress []rollupDatapoint
+
+// 	ringCursor := level.currentBufferPos
+// 	for i := 0; i < level.compressionPeriod; i++ {
+// 		if ringCursor.Value != nil {
+// 			if ringCursor.Value.(validatedData).valid {
+// 				datapointsToCompress = append(datapointsToCompress, ringCursor.Value.(validatedData).rollup)
+// 			}
+// 		}
+
+// 		ringCursor = ringCursor.Prev()
+// 	}
+
+// 	var dataToAdd validatedData
+// 	if len(datapointsToCompress) > 0 {
+// 		compressedData := compressRollupDatapoints(datapointsToCompress)
+// 		dataToAdd = validatedData{
+// 			valid:  true,
+// 			rollup: compressedData,
+// 		}
+// 	} else {
+
+// 		var oldestTimestamp int64
+// 		// ringCursor ends up one past the "end" of the compression period
+// 		if ringCursor.Next().Value != nil {
+// 			oldestTimestamp = ringCursor.Next().Value.(validatedData).rollup.timestampNanos
+// 		}
+
+// 		dataToAdd = validatedData{
+// 			valid: false,
+// 			rollup: rollupDatapoint{
+// 				timestampNanos: oldestTimestamp,
+// 			},
+// 		}
+// 	}
+
+// 	return dataToAdd
+// }

@@ -77,7 +77,6 @@ const (
 	defaultReplicaRaftMuWarnThreshold = 500 * time.Millisecond
 )
 
-<<<<<<< HEAD
 var testingDisableQuiescence = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_QUIESCENCE", false)
 
 var disableSyncRaftLog = settings.RegisterBoolSetting(
@@ -86,23 +85,6 @@ var disableSyncRaftLog = settings.RegisterBoolSetting(
 		"Setting to true risks data loss or data corruption on server crashes. "+
 		"The setting is meant for internal testing only and SHOULD NOT be used in production.",
 	false,
-=======
-// TODO(irfansharif, peter): What's a good default? Too low and everything comes
-// to a grinding halt, too high and we're not really throttling anything
-// (we'll still generate snapshots). Should it be adjusted dynamically?
-//
-// We set the defaultProposalQuota to be less than raftLogMaxSize, in doing so
-// we ensure all replicas have sufficiently up to date logs so that when the
-// log gets truncated, the followers do not need non-preemptive snapshots.
-var defaultProposalQuota = raftLogMaxSize / 4
-
-var syncRaftLog = settings.RegisterBoolSetting(
-	"kv.raft_log.synchronize",
-	`set to `+"`true`"+` to synchronize on Raft log writes to persistent storage 
-	(`+"`true`"+` is highly recommended; `+"`false`"+`can disable a node's ability 
-	to recover from a failure)`,
-	true,
->>>>>>> savepoint for F-val table rewrite
 )
 
 // MaxCommandSizeFloor is the minimum allowed value for the MaxCommandSize

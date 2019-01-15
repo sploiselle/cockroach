@@ -559,44 +559,42 @@ func (db *DB) queryAndComputeRollupsForSpan(
 // 	return rollup, nil
 // }
 
-func compressRollupDatapoints(datapoints []rollupDatapoint) rollupDatapoint {
+func compressRollupDatapoints(datapoints []tspb.RollupDatapoint) tspb.RollupDatapoint {
 
 	compressedDatapoint := datapoints[0]
 	for i := 1; i < len(datapoints); i++ {
-		compressedDatapoint.variance = computeParallelVariance(
+		compressedDatapoint.Variance = computeParallelVariance(
 			parallelVarianceArgs{
-				count:    compressedDatapoint.count,
-				average:  compressedDatapoint.sum / float64(compressedDatapoint.count),
-				variance: compressedDatapoint.variance,
+				count:    compressedDatapoint.Count,
+				average:  compressedDatapoint.Sum / float64(compressedDatapoint.Count),
+				variance: compressedDatapoint.Variance,
 			},
 			parallelVarianceArgs{
-				count:    datapoints[i].count,
-				average:  datapoints[i].sum / float64(datapoints[i].count),
-				variance: datapoints[i].variance,
+				count:    datapoints[i].Count,
+				average:  datapoints[i].Sum / float64(datapoints[i].Count),
+				variance: datapoints[i].Variance,
 			},
 		)
-		compressedDatapoint.timestampNanos = int64(math.Min(
-			float64(compressedDatapoint.timestampNanos),
-			float64(datapoints[i].timestampNanos)),
-		)
-		compressedDatapoint.count += datapoints[i].count
-		compressedDatapoint.last = datapoints[i].last
-		compressedDatapoint.max = math.Max(compressedDatapoint.max, datapoints[i].max)
-		compressedDatapoint.min = math.Min(compressedDatapoint.min, datapoints[i].min)
-		compressedDatapoint.sum += datapoints[i].sum
+		// compressedDatapoint.TimestampNanos = int64(math.Min(
+		// 	float64(compressedDatapoint.TimestampNanos),
+		// 	float64(datapoints[i].TimestampNanos)),
+		// )
+		compressedDatapoint.Count += datapoints[i].Count
+		compressedDatapoint.Last = datapoints[i].Last
+		compressedDatapoint.Max = math.Max(compressedDatapoint.Max, datapoints[i].Max)
+		compressedDatapoint.Min = math.Min(compressedDatapoint.Min, datapoints[i].Min)
+		compressedDatapoint.Sum += datapoints[i].Sum
 	}
 
 	return compressedDatapoint
 }
 
-func compressRollupDatapointsAtTimestamp(datapoints []rollupDatapoint, timestamp int64) rollupDatapoint {
+func compressRollupDatapointsAtTimestamp(datapoints []tspb.RollupDatapoint, timestamp int64) tspb.RollupDatapoint {
 	if len(datapoints) > 0 {
-		datapoints[0].timestampNanos = timestamp
+		// datapoints[0].timestampNanos = timestamp
 		return compressRollupDatapoints(datapoints)
 	} else {
-		return rollupDatapoint{
-			timestampNanos: timestamp,
-		}
+		return tspb.RollupDatapoint{}
 	}
 }
 
