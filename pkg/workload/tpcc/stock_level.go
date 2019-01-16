@@ -79,7 +79,7 @@ func createStockLevel(
 				AND ol_d_id = $2
 				AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
 				AND s_quantity < $4
-		)`,
+		) s`,
 	)
 
 	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {
@@ -106,6 +106,19 @@ func (s *stockLevel) run(ctx context.Context, wID int) (interface{}, error) {
 	if err := crdb.ExecuteInTx(
 		ctx, (*workload.PgxTx)(tx),
 		func() error {
+<<<<<<< HEAD
+=======
+			// This is the only join in the application, so we don't need to worry about
+			// this setting persisting incorrectly across queries.
+			// Note that this is not needed (and doesn't do anything) when the
+			// optimizer is on. We still set it for when the optimizer is disabled
+			// or when running against older versions of CRDB.
+			// TEMP DISABLE FOR PG SUPPORT
+			// if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
+			// 	return err
+			// }
+
+>>>>>>> add connection parameter
 			var dNextOID int
 			if err := s.selectDNextOID.QueryRowTx(
 				ctx, tx, wID, d.dID,

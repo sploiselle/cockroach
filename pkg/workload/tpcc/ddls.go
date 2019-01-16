@@ -73,9 +73,9 @@ const (
 		c_payment_cnt  integer,
 		c_delivery_cnt integer,
 		c_data         varchar(500),
-		primary key (c_w_id, c_d_id, c_id),
-		index customer_idx (c_w_id, c_d_id, c_last, c_first)
+		primary key (c_w_id, c_d_id, c_id)
 	)`
+<<<<<<< HEAD
 	tpccCustomerSchemaInterleaveSuffix = `
 		interleave in parent district (c_w_id, c_d_id)`
 
@@ -97,6 +97,40 @@ const (
 
 	// ORDER table.
 	tpccOrderSchemaBase = `(
+=======
+	tpccCustomerIndexesCustomerIdx = `(c_w_id, c_d_id, c_last, c_first)`
+
+	tpccCustomerSchemaInterleave = ` interleave in parent district (c_w_id, c_d_id)`
+	// No PK necessary for this table.
+	tpccHistorySchema = `(
+		rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+		h_c_id   integer,
+		h_c_d_id integer,
+		h_c_w_id integer,
+		h_d_id   integer,
+		h_w_id   integer,
+		h_date   timestamp,
+		h_amount decimal(6,2),
+		h_data   varchar(24)
+	)`
+	tpccHistorySchemaIndexes1 = `(h_w_id, h_d_id)`
+	tpccHistorySchemaIndexes2 = `(h_c_w_id, h_c_d_id, h_c_id)`
+
+	// tpccOrderSchema = `(
+	// 	o_id         integer      not null,
+	// 	o_d_id       integer      not null,
+	// 	o_w_id       integer      not null,
+	// 	o_c_id       integer,
+	// 	o_entry_d    timestamp,
+	// 	o_carrier_id integer,
+	// 	o_ol_cnt     integer,
+	// 	o_all_local  integer,
+	// 	primary key (o_w_id, o_d_id, o_id DESC),
+	// 	unique (o_w_id, o_d_id, o_carrier_id, o_id)
+	// )`
+
+	tpccOrderSchema = `(
+>>>>>>> cannot propagate flags to tpcc
 		o_id         integer      not null,
 		o_d_id       integer      not null,
 		o_w_id       integer      not null,
@@ -105,6 +139,7 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
+<<<<<<< HEAD
 		primary key  (o_w_id, o_d_id, o_id DESC),
 		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC)
 	)`
@@ -113,6 +148,15 @@ const (
 
 	// NEW-ORDER table.
 	tpccNewOrderSchema = `(
+=======
+		primary key (o_w_id, o_d_id, o_id),
+		unique (o_w_id, o_d_id, o_carrier_id, o_id)
+	)`
+	tpccOrderIndexes1 = `(o_w_id, o_d_id, o_c_id)`
+
+	tpccOrderSchemaInterleave = ` interleave in parent district (o_w_id, o_d_id)`
+	tpccNewOrderSchema        = `(
+>>>>>>> cannot propagate flags to tpcc
 		no_o_id  integer   not null,
 		no_d_id  integer   not null,
 		no_w_id  integer   not null,
@@ -153,6 +197,7 @@ const (
 		s_order_cnt  integer,
 		s_remote_cnt integer,
 		s_data       varchar(50),
+<<<<<<< HEAD
 		primary key (s_w_id, s_i_id)`
 	tpccStockSchemaFkSuffix = `
 		index stock_item_fk_idx (s_i_id)`
@@ -161,6 +206,28 @@ const (
 
 	// ORDER-LINE table.
 	tpccOrderLineSchemaBase = `(
+=======
+		primary key (s_w_id, s_i_id)
+	)`
+	tpccStockSchemaInterleave = ` interleave in parent warehouse (s_w_id)`
+	tpccStockIndexes1         = `(s_i_id)`
+
+	// tpccOrderLineSchema = `(
+	// 	ol_o_id         integer   not null,
+	// 	ol_d_id         integer   not null,
+	// 	ol_w_id         integer   not null,
+	// 	ol_number       integer   not null,
+	// 	ol_i_id         integer   not null,
+	// 	ol_supply_w_id  integer,
+	// 	ol_delivery_d   timestamp,
+	// 	ol_quantity     integer,
+	// 	ol_amount       decimal(6,2),
+	// 	ol_dist_info    char(24),
+	// 	primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)
+	// )`
+
+	tpccOrderLineSchema = `(
+>>>>>>> cannot propagate flags to tpcc
 		ol_o_id         integer   not null,
 		ol_d_id         integer   not null,
 		ol_w_id         integer   not null,
@@ -171,11 +238,18 @@ const (
 		ol_quantity     integer,
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
+<<<<<<< HEAD
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
 	tpccOrderLineSchemaFkSuffix = `
 		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 	tpccOrderLineSchemaInterleaveSuffix = `
 		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
+=======
+		primary key (ol_w_id, ol_d_id, ol_o_id, ol_number)
+	)`
+	tpccOrderLineSchemaInterleave  = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
+	tpccOrderLineIndexesOderLineFK = `(ol_supply_w_id, ol_i_id)`
+>>>>>>> cannot propagate flags to tpcc
 )
 
 func maybeAddFkSuffix(fks bool, base, suffix string) string {

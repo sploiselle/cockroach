@@ -43,7 +43,7 @@ type orderStatusData struct {
 	cBalance   float64
 	oID        int
 	oEntryD    time.Time
-	oCarrierID pgtype.Int8
+	oCarrierID pgtype.Int4
 
 	items []orderItem
 }

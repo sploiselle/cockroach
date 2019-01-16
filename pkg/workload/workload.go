@@ -140,6 +140,9 @@ type Table struct {
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
 	// <name>` prefix omitted.
 	Schema string
+	// Indexes is a slice of `CREATE INDEX` statements with the `CREATE INDEX
+	// ON <name>` prefix omitted
+	Indexes []string
 	// InitialRows is the initial rows that will be present in the table after
 	// setup is completed. Note that the default value of NumBatches (zero) is
 	// special - such a Table will be skipped during `init`; non-zero NumBatches
@@ -443,3 +446,302 @@ func ApproxDatumSize(x interface{}) int64 {
 		panic(fmt.Sprintf("unsupported type %T: %v", x, x))
 	}
 }
+<<<<<<< HEAD
+=======
+
+// Setup creates the given tables and fills them with initial data via batched
+// INSERTs. batchSize will only be used when positive (but INSERTs are batched
+// either way). The function is idempotent and can be called multiple times if
+// the Generator does not have any initial rows.
+//
+// The size of the loaded data is returned in bytes, suitable for use with
+// SetBytes of benchmarks. The exact definition of this is deferred to the
+// ApproxDatumSize implementation.
+func Setup(
+	ctx context.Context, db *gosql.DB, gen Generator, batchSize, concurrency int,
+) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = 1000
+	}
+	if concurrency < 1 {
+		concurrency = 1
+	}
+
+	// SET SCHEMA required for Postgres support
+	schema := gen.Meta().Name
+
+	tables := gen.Tables()
+	var hooks Hooks
+	if h, ok := gen.(Hookser); ok {
+		hooks = h.Hooks()
+	}
+
+	for _, table := range tables {
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS %s."%s" %s`, schema, table.Name, table.Schema)
+		fmt.Println(createStmt)
+		if _, err := db.ExecContext(ctx, createStmt); err != nil {
+			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
+		}
+
+		// Indexes must be created outside of CREATE TABLE for Postgres support
+		for _, idx := range table.Indexes {
+			createIndexStmt := fmt.Sprintf(`CREATE INDEX on %s."%s" %s`, schema, table.Name, idx)
+			if _, err := db.ExecContext(ctx, createIndexStmt); err != nil {
+				return 0, errors.Wrapf(err, "could not create index: %s %s", table.Name, idx)
+			}
+		}
+	}
+
+	if hooks.PreLoad != nil {
+		if err := hooks.PreLoad(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not preload")
+		}
+	}
+
+	var size int64
+	for _, table := range tables {
+		if table.InitialRows.NumBatches == 0 {
+			continue
+		} else if table.InitialRows.Batch == nil {
+			return 0, errors.Errorf(
+				`initial data is not supported for workload %s`, gen.Meta().Name)
+		}
+		batchesPerWorker := table.InitialRows.NumBatches / concurrency
+		g, gCtx := errgroup.WithContext(ctx)
+		for i := 0; i < concurrency; i++ {
+			startIdx := i * batchesPerWorker
+			endIdx := startIdx + batchesPerWorker
+			if i == concurrency-1 {
+				// Account for any rounding error in batchesPerWorker.
+				endIdx = table.InitialRows.NumBatches
+			}
+			g.Go(func() error {
+				var insertStmtBuf bytes.Buffer
+				var params []interface{}
+				var numRows int
+				flush := func() error {
+					if len(params) > 0 {
+						insertStmt := insertStmtBuf.String()
+						// fmt.Println("insertStmt", insertStmt)
+						if _, err := db.ExecContext(gCtx, insertStmt, params...); err != nil {
+							return errors.Wrapf(err, "failed insert into %s", table.Name)
+						}
+					}
+					insertStmtBuf.Reset()
+					fmt.Fprintf(&insertStmtBuf, `INSERT INTO %s."%s" VALUES `, schema, table.Name)
+					params = params[:0]
+					numRows = 0
+					return nil
+				}
+				_ = flush()
+
+				for rowBatchIdx := startIdx; rowBatchIdx < endIdx; rowBatchIdx++ {
+					for _, row := range table.InitialRows.Batch(rowBatchIdx) {
+						if len(params) != 0 {
+							insertStmtBuf.WriteString(`,`)
+						}
+						insertStmtBuf.WriteString(`(`)
+						for i, datum := range row {
+							atomic.AddInt64(&size, ApproxDatumSize(datum))
+							if i != 0 {
+								insertStmtBuf.WriteString(`,`)
+							}
+							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
+						}
+						params = append(params, row...)
+						insertStmtBuf.WriteString(`)`)
+						if numRows++; numRows >= batchSize {
+							if err := flush(); err != nil {
+								return err
+							}
+						}
+					}
+				}
+				return flush()
+			})
+		}
+		if err := g.Wait(); err != nil {
+			return 0, err
+		}
+	}
+
+	if hooks.PostLoad != nil {
+		if err := hooks.PostLoad(db); err != nil {
+			return 0, errors.Wrapf(err, "Could not postload")
+		}
+	}
+
+	return size, nil
+}
+
+func maybeDisableMergeQueue(db *gosql.DB) error {
+	var ok bool
+	if err := db.QueryRow(
+		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
+	).Scan(&ok); err != nil || !ok {
+		return err
+	}
+	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
+	return err
+}
+
+// Split creates the range splits defined by the given table.
+func Split(ctx context.Context, db *gosql.DB, table Table, concurrency int) error {
+	// Prevent the merge queue from immediately discarding our splits.
+	if err := maybeDisableMergeQueue(db); err != nil {
+		return err
+	}
+
+	if table.Splits.NumBatches <= 0 {
+		return nil
+	}
+	splitPoints := make([][]interface{}, 0, table.Splits.NumBatches)
+	for splitIdx := 0; splitIdx < table.Splits.NumBatches; splitIdx++ {
+		splitPoints = append(splitPoints, table.Splits.Batch(splitIdx)...)
+	}
+	sort.Sort(sliceSliceInterface(splitPoints))
+
+	type pair struct {
+		lo, hi int
+	}
+	splitCh := make(chan pair, len(splitPoints)/2+1)
+	splitCh <- pair{0, len(splitPoints)}
+	doneCh := make(chan struct{})
+
+	log.Infof(ctx, `starting %d splits`, len(splitPoints))
+	g := ctxgroup.WithContext(ctx)
+	for i := 0; i < concurrency; i++ {
+		g.GoCtx(func(ctx context.Context) error {
+			var buf bytes.Buffer
+			for {
+				select {
+				case p, ok := <-splitCh:
+					if !ok {
+						return nil
+					}
+
+					m := (p.lo + p.hi) / 2
+					split := strings.Join(StringTuple(splitPoints[m]), `,`)
+
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SPLIT AT VALUES (%s)`, table.Name, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						return errors.Wrap(err, buf.String())
+					}
+
+					buf.Reset()
+					fmt.Fprintf(&buf, `ALTER TABLE %s SCATTER FROM (%s) TO (%s)`,
+						table.Name, split, split)
+					if _, err := db.Exec(buf.String()); err != nil {
+						// SCATTER can collide with normal replicate queue
+						// operations and fail spuriously, so only print the
+						// error.
+						log.Warningf(ctx, `%s: %s`, buf.String(), err)
+					}
+
+					select {
+					case doneCh <- struct{}{}:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+
+					if p.lo < m {
+						splitCh <- pair{p.lo, m}
+					}
+					if m+1 < p.hi {
+						splitCh <- pair{m + 1, p.hi}
+					}
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+
+			}
+		})
+	}
+	g.GoCtx(func(ctx context.Context) error {
+		finished := 0
+		for finished < len(splitPoints) {
+			select {
+			case <-doneCh:
+				finished++
+				if finished%1000 == 0 {
+					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+				}
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		close(splitCh)
+		return nil
+	})
+	return g.Wait()
+}
+
+// StringTuple returns the given datums as strings suitable for use in directly
+// in SQL.
+//
+// TODO(dan): Remove this once SCATTER supports placeholders.
+func StringTuple(datums []interface{}) []string {
+	s := make([]string, len(datums))
+	for i, datum := range datums {
+		if datum == nil {
+			s[i] = `NULL`
+			continue
+		}
+		switch x := datum.(type) {
+		case int:
+			s[i] = strconv.Itoa(x)
+		case uint64:
+			s[i] = strconv.FormatUint(x, 10)
+		case string:
+			s[i] = lex.EscapeSQLString(x)
+		case float64:
+			s[i] = fmt.Sprintf(`%f`, x)
+		case []byte:
+			s[i] = fmt.Sprintf(`X'%x'`, x)
+		default:
+			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		}
+	}
+	return s
+}
+
+type sliceSliceInterface [][]interface{}
+
+func (s sliceSliceInterface) Len() int      { return len(s) }
+func (s sliceSliceInterface) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s sliceSliceInterface) Less(i, j int) bool {
+	for offset := 0; ; offset++ {
+		iLen, jLen := len(s[i]), len(s[j])
+		if iLen <= offset || jLen <= offset {
+			return iLen < jLen
+		}
+		var cmp int
+		switch x := s[i][offset].(type) {
+		case int:
+			if y := s[j][offset].(int); x < y {
+				return true
+			} else if x > y {
+				return false
+			}
+			continue
+		case uint64:
+			if y := s[j][offset].(uint64); x < y {
+				return true
+			} else if x > y {
+				return false
+			}
+			continue
+		case string:
+			cmp = strings.Compare(x, s[j][offset].(string))
+		default:
+			panic(fmt.Sprintf("unsupported type %T: %v", x, x))
+		}
+		if cmp < 0 {
+			return true
+		} else if cmp > 0 {
+			return false
+		}
+	}
+}
+>>>>>>> schema does not exist

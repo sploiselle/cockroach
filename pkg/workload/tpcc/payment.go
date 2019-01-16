@@ -132,9 +132,9 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	p.updateWithPayment = p.sr.Define(`
 		UPDATE customer
 		SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =
-		(c_balance - ($1:::float)::decimal, c_ytd_payment + ($1:::float)::decimal, c_payment_cnt + 1,
+		(c_balance - ($1::float)::decimal, c_ytd_payment + ($1::float)::decimal, c_payment_cnt + 1,
 			 case c_credit when 'BC' then
-			 left(c_id::text || c_d_id::text || c_w_id::text || ($5:::int)::text || ($6:::int)::text || ($1:::float)::text || c_data, 500)
+			 left(c_id::text || c_d_id::text || c_w_id::text || ($5::int)::text || ($6::int)::text || ($1::float)::text || c_data, 500)
 			 else c_data end)
 		WHERE c_w_id = $2 AND c_d_id = $3 AND c_id = $4
 		RETURNING c_first, c_middle, c_last, c_street_1, c_street_2,

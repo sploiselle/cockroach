@@ -63,6 +63,8 @@ var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
 
+var usePostgres = sharedFlags.Bool("pg", false, "Only use Postgres-compatible features")
+
 func init() {
 	AddSubCmd(func(userFacing bool) *cobra.Command {
 		var initCmd = SetCmdDefaults(&cobra.Command{
@@ -263,8 +265,23 @@ func runInitImpl(
 			return err
 		}
 	}
-	if _, err := initDB.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS `+dbName); err != nil {
+
+	if _, err := initDB.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+dbName); err != nil {
 		return err
+	}
+
+	// Postgres compatibility: Postgres doesn't support CREATE DATABASE IF NOT EXISTS
+	// so this workaround checks if a database with the same name exists, and only
+	// creates it if it doesn't. There's little concern of a race condition in this context,
+	// so it's an acceptable workaround.
+
+	var tableExists int
+	initDB.QueryRow(fmt.Sprintf(`SELECT 1 FROM pg_database WHERE datname = '%s'`, dbName)).Scan(&tableExists)
+
+	if tableExists == 0 {
+		if _, err := initDB.ExecContext(ctx, `CREATE DATABASE `+dbName); err != nil {
+			return err
+		}
 	}
 
 	var l workload.InitialDataLoader
@@ -280,6 +297,14 @@ func runInitImpl(
 		l = workload.ImportDataLoader
 	default:
 		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
+	}
+
+	// pgcrypto is required for Postgres to support gen_random_uuid()
+	if *usePostgres {
+		if _, err := initDB.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`); err != nil {
+			return err
+		}
+
 	}
 
 	_, err := workloadsql.Setup(ctx, initDB, gen, l)

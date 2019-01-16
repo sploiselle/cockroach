@@ -381,7 +381,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 				fmt.Sprintf(`
 					UPDATE stock
 					SET
-						s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
+						s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE 999 END,
 						s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
 						s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
 						s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END

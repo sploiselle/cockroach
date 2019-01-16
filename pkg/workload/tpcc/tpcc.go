@@ -51,6 +51,7 @@ type tpcc struct {
 	mix        string
 	doWaits    bool
 	workers    int
+	conns      int
 	fks        bool
 	dbOverride string
 
@@ -117,6 +118,7 @@ var tpccMeta = workload.Meta{
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`pg`:                 {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -146,6 +148,9 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+
+		g.flags.BoolVar(&g.usePostgres, `pg`, false, `Only use Postgres compatible features`)
+
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -165,6 +170,7 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
+
 			if w.warehouses < 1 {
 				return errors.Errorf(`--warehouses must be positive`)
 			}
@@ -504,7 +510,15 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	}
 
 	w.reg = reg
-	w.usePostgres = parsedURL.Port() == "5432"
+	w.usePostgres = w.usePostgres || parsedURL.Port() == "5432"
+
+	if w.usePostgres && (w.partitions > 1 || w.split || w.scatter || w.interleaved) {
+		w.partitions = 1
+		w.split = false
+		w.scatter = false
+		w.interleaved = false
+		fmt.Printf("Overriding config options for PostgreSQL support (partitions, split, scatter, interleaved)\n")
+	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
