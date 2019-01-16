@@ -100,13 +100,24 @@ func createOrderStatus(
 	)
 
 	// Select the customer's order.
-	o.selectOrder = o.sr.Define(`
-		SELECT o_id, o_entry_d, o_carrier_id
-		FROM "order"
-		WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
-		ORDER BY o_id DESC
-		LIMIT 1`,
-	)
+	if config.usePostgres {
+		// Postgres' default it INT4, so must be cast to INT8.
+		o.selectOrder = o.sr.Define(`
+			SELECT o_id, o_entry_d, o_carrier_id::INT8
+			FROM "order"
+			WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
+			ORDER BY o_id DESC
+			LIMIT 1`,
+		)
+	} else {
+		o.selectOrder = o.sr.Define(`
+			SELECT o_id, o_entry_d, o_carrier_id
+			FROM "order"
+			WHERE o_w_id = $1 AND o_d_id = $2 AND o_c_id = $3
+			ORDER BY o_id DESC
+			LIMIT 1`,
+		)
+	}
 
 	// Select the items from the customer's order.
 	o.selectItems = o.sr.Define(`

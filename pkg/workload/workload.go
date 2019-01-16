@@ -138,7 +138,8 @@ type Table struct {
 	// Name is the unqualified table name, pre-escaped for use directly in SQL.
 	Name string
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
-	// <name>` prefix omitted.
+	// <name>` prefix omitted. When using Postgres, this can also include
+	// `CREATE INDEX` statements.
 	Schema string
 	// InitialRows is the initial rows that will be present in the table after
 	// setup is completed. Note that the default value of NumBatches (zero) is

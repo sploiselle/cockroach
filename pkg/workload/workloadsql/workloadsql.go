@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/lib/pq"
 	"github.com/pkg/errors"
 	"golang.org/x/time/rate"
 )
@@ -65,6 +66,14 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	if err := db.QueryRow(
 		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
 	).Scan(&ok); err != nil || !ok {
+		if err, ok := err.(*pq.Error); ok {
+			// 42601 is PostgreSQL's syntax error code; if we receive that error
+			// we can infer that we're connecting to pg, which doesn't support
+			// these operations and this function should be aborted.
+			if err.Code == "42601" {
+				return nil
+			}
+		}
 		return err
 	}
 	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")

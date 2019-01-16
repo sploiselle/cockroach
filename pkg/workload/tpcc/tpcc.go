@@ -115,8 +115,8 @@ var tpccMeta = workload.Meta{
 			`split`:              {RuntimeOnly: true},
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
-			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
+			`pgtpcc`:             {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -146,6 +146,9 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
+
+		g.flags.BoolVar(&g.usePostgres, `pgtpcc`, false, `Only use Postgres-compatible features for TPCC`)
+
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
 		// Hardcode this since it doesn't seem like anyone will want to change
@@ -238,16 +241,16 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// TODO(lucy-zhang): expose an internal knob to validate fk
 				// relations without performing full validation. See #38833.
 				fkStmts := []string{
-					`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
-					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
-					`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
-					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
+					`alter table tpcc.district add foreign key (d_w_id) references warehouse (w_id) not valid`,
+					`alter table tpcc.customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table tpcc.history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table tpcc.history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table tpcc."order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table tpcc.new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table tpcc.stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
+					`alter table tpcc.stock add foreign key (s_i_id) references item (i_id) not valid`,
+					`alter table tpcc.order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table tpcc.order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
 				}
 
 				for _, fkStmt := range fkStmts {
@@ -382,7 +385,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccCustomerSchemaBase,
+			addIndexes(
+				w,
+				tpccCustomerSchemaBase,
+				[]indexDDL{tpccCustomerIndex},
+			),
 			tpccCustomerSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
@@ -391,10 +398,11 @@ func (w *tpcc) Tables() []workload.Table {
 		},
 		Stats: w.tpccCustomerStats(),
 	}
+
 	history := workload.Table{
 		Name: `history`,
 		Schema: maybeAddFkSuffix(
-			w.fks,
+			w,
 			tpccHistorySchemaBase,
 			tpccHistorySchemaFkSuffix,
 		),
@@ -413,7 +421,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccOrderSchemaBase,
+			addIndexes(
+				w,
+				tpccOrderSchemaBase,
+				[]indexDDL{tpccOrderIndex},
+			),
 			tpccOrderSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
@@ -421,6 +433,15 @@ func (w *tpcc) Tables() []workload.Table {
 			FillBatch:  w.tpccOrderInitialRowBatch,
 		},
 	}
+
+	if w.usePostgres {
+		order.Schema = addIndexes(
+			w,
+			tpccOrderSchemaBasePG,
+			[]indexDDL{tpccOrderIndexPG},
+		)
+	}
+
 	newOrder := workload.Table{
 		Name:   `new_order`,
 		Schema: tpccNewOrderSchema,
@@ -450,7 +471,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w,
 				tpccStockSchemaBase,
 				tpccStockSchemaFkSuffix,
 			),
@@ -467,7 +488,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w,
 				tpccOrderLineSchemaBase,
 				tpccOrderLineSchemaFkSuffix,
 			),
@@ -479,6 +500,15 @@ func (w *tpcc) Tables() []workload.Table {
 		},
 		Stats: w.tpccOrderLineStats(),
 	}
+
+	if w.usePostgres {
+		orderLine.Schema = maybeAddFkSuffix(
+			w,
+			tpccOrderLineSchemaBasePG,
+			tpccOrderLineSchemaFkSuffix,
+		)
+	}
+
 	return []workload.Table{
 		warehouse, district, customer, history, order, newOrder, item, stock, orderLine,
 	}
@@ -504,7 +534,15 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	}
 
 	w.reg = reg
-	w.usePostgres = parsedURL.Port() == "5432"
+	w.usePostgres = w.usePostgres || parsedURL.Port() == "5432"
+
+	if w.usePostgres && (w.partitions > 1 || w.split || w.scatter || w.interleaved) {
+		w.partitions = 1
+		w.split = false
+		w.scatter = false
+		w.interleaved = false
+		fmt.Printf("Overriding config options for PostgreSQL support (partitions, split, scatter, interleaved)\n")
+	}
 
 	// We can't use a single MultiConnPool because we want to implement partition
 	// affinity. Instead we have one MultiConnPool per server.
