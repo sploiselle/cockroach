@@ -92,6 +92,18 @@ const (
 		index (h_w_id, h_d_id),
 		index (h_c_w_id, h_c_d_id, h_c_id)
 	)`
+	tpccHistorySchemaMySQL = `(
+		rowid    binary(16),
+		h_c_id   integer,
+		h_c_d_id integer,
+		h_c_w_id integer,
+		h_d_id   integer,
+		h_w_id   integer,
+		h_date   timestamp,
+		h_amount decimal(6,2),
+		h_data   varchar(24)
+	)`
+
 	tpccOrderSchema = `(
 		o_id         integer      not null,
 		o_d_id       integer      not null,

@@ -65,6 +65,7 @@ type tpcc struct {
 	zones             []string
 
 	usePostgres  bool
+	useMySQL     bool
 	serializable bool
 	txOpts       *gosql.TxOptions
 
@@ -138,6 +139,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
+		g.flags.BoolVar(&g.useMySQL, `mysqltpcc`, false, `Use a MySQL driver`)
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		return g
@@ -201,14 +203,14 @@ func (w *tpcc) Hooks() workload.Hooks {
 		PostLoad: func(sqlDB *gosql.DB) error {
 			if w.fks {
 				fkStmts := []string{
-					`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
-					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id)`,
-					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
-					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
-					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
-					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
-					`alter table stock add foreign key (s_i_id) references item (i_id)`,
-					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
+					`alter table tpcc.district add foreign key (d_w_id) references tpcc.warehouse (w_id)`,
+					`alter table tpcc.customer add foreign key (c_w_id, c_d_id) references tpcc.district (d_w_id, d_id)`,
+					`alter table tpcc.history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references tpcc.customer (c_w_id, c_d_id, c_id)`,
+					`alter table tpcc.history add foreign key (h_w_id, h_d_id) references tpcc.district (d_w_id, d_id)`,
+					`alter table tpcc."order" add foreign key (o_w_id, o_d_id, o_c_id) references tpcc.customer (c_w_id, c_d_id, c_id)`,
+					`alter table tpcc.stock add foreign key (s_w_id) references tpcc.warehouse (w_id)`,
+					`alter table tpcc.stock add foreign key (s_i_id) references tpcc.item (i_id)`,
+					`alter table tpcc.order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references tpcc."order" (o_w_id, o_d_id, o_id)`,
 				}
 
 				// TODO(anyone): Remove this check. Once fixtures are
@@ -335,6 +337,11 @@ func (w *tpcc) Tables() []workload.Table {
 			w.tpccHistoryInitialRow,
 		),
 	}
+
+	if w.useMySQL {
+		history.Schema = tpccHistorySchemaMySQL
+	}
+
 	order := workload.Table{
 		Name:   `order`,
 		Schema: tpccOrderSchema,
@@ -407,7 +414,13 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	nConns := w.activeWarehouses / len(urls)
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
-		dbs[i], err = gosql.Open(`postgres`, url)
+		if w.useMySQL {
+			fmt.Println("url", url)
+			dbs[i], err = gosql.Open(`mysql`, url)
+		} else {
+			dbs[i], err = gosql.Open(`postgres`, url)
+		}
+
 		if err != nil {
 			return workload.QueryLoad{}, err
 		}

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	_ "github.com/go-sql-driver/mysql"
 )
 
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
@@ -57,6 +58,8 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
+
+var useMySQL = sharedFlags.Bool(`mysql`, false, "Use MySQL driver")
 
 var histograms = runFlags.String(
 	"histograms", "",
@@ -223,7 +226,16 @@ func workerRun(
 func runInit(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
-	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	var initDB *gosql.DB
+	var err error
+
+	if *useMySQL {
+		fmt.Println("url", strings.Join(urls, ` `))
+		initDB, err = gosql.Open(`mysql`, strings.Join(urls, ` `))
+	} else {
+		initDB, err = gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	}
+
 	if err != nil {
 		return err
 	}
@@ -242,6 +254,15 @@ func runInitImpl(
 	}
 	if _, err := initDB.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS `+dbName); err != nil {
 		return err
+	}
+
+	if *useMySQL {
+		if _, err := initDB.ExecContext(ctx, `SET GLOBAL sql_mode = 'ansi_quotes'`); err != nil {
+			return err
+		}
+		if _, err := initDB.ExecContext(ctx, `SET SESSION sql_mode = 'ansi_quotes'`); err != nil {
+			return err
+		}
 	}
 
 	const batchSize = -1
@@ -274,7 +295,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
 	startPProfEndPoint(ctx)
-	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+
+	var initDB *gosql.DB
+	var err error
+
+	if *useMySQL {
+		fmt.Println("url", strings.Join(urls, ` `))
+		initDB, err = gosql.Open(`mysql`, strings.Join(urls, ` `))
+	} else {
+		initDB, err = gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	}
+
 	if err != nil {
 		return err
 	}
