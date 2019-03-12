@@ -545,11 +545,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d90f0d96ae6a00bf358b7a987906738be420387492172deecdaa9f76f21e229c"
+  digest = "1:e8aed6a962c25dc86fa885a9386129a9f2bb6f641849dd09a698285e946accbc"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
   pruneopts = "UT"
-  revision = "fade21009797158e7b79e04c340118a9220c6f9e"
+  revision = "2c9d54fefcfb443251f5b92cd5106cf4dc07b880"
 
 [[projects]]
   digest = "1:aba848b77ff362b03db51ac06379c36a120bc05b4cc6c5c74f6e6fa310454fa5"
@@ -1284,14 +1284,6 @@
   version = "v2.18.06"
 
 [[projects]]
-  branch = "master"
-  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
-  name = "github.com/shirou/w32"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
-
-[[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"
   name = "github.com/sirupsen/logrus"
   packages = ["."]
@@ -1519,10 +1511,11 @@
   revision = "9c79deebf7496e355d7e95d82d4af1fe4e769b2f"
 
 [[projects]]
-  digest = "1:a48f97fb737d5d61cf13e81cfef040942d217d086766b823757d39d4f6a4c547"
+  digest = "1:8c82ef9b816279a63d490dcdc37218c496923596e8d246c018ded6a0d3f8b59b"
   name = "google.golang.org/appengine"
   packages = [
     ".",
+    "cloudsql",
     "internal",
     "internal/app_identity",
     "internal/base",
