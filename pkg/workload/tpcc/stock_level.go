@@ -73,9 +73,9 @@ func (s stockLevel) run(
 			// Note that this is not needed (and doesn't do anything) when the
 			// optimizer is on. We still set it for when the optimizer is disabled
 			// or when running against older versions of CRDB.
-			if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
-				return err
-			}
+			// if _, err := tx.Exec(`set experimental_force_lookup_join=true`); err != nil {
+			// 	return err
+			// }
 
 			var dNextOID int
 			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
@@ -101,7 +101,7 @@ func (s stockLevel) run(
 			  	  AND ol_d_id = %[2]d
 			  	  AND ol_o_id BETWEEN %[3]d - 20 AND %[3]d - 1
 			  	  AND s_quantity < %[4]d
-			  )`,
+			  ) s`,
 				wID, d.dID, dNextOID, d.threshold),
 			).Scan(&d.lowStock)
 		}); err != nil {

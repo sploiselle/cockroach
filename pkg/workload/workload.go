@@ -281,8 +281,12 @@ func Setup(
 		hooks = h.Hooks()
 	}
 
+	if _, err := db.ExecContext(ctx, "USE tpcc"); err != nil {
+		return 0, errors.Wrapf(err, "could not set default database")
+	}
+
 	for _, table := range tables {
-		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS "%s" %s`, table.Name, table.Schema)
+		createStmt := fmt.Sprintf(`CREATE TABLE IF NOT EXISTS tpcc."%s" %s`, table.Name, table.Schema)
 		if _, err := db.ExecContext(ctx, createStmt); err != nil {
 			return 0, errors.Wrapf(err, "could not create table: %s", table.Name)
 		}
@@ -323,7 +327,7 @@ func Setup(
 						}
 					}
 					insertStmtBuf.Reset()
-					fmt.Fprintf(&insertStmtBuf, `INSERT INTO "%s" VALUES `, table.Name)
+					fmt.Fprintf(&insertStmtBuf, `INSERT INTO tpcc."%s" VALUES `, table.Name)
 					params = params[:0]
 					numRows = 0
 					return nil
@@ -341,7 +345,7 @@ func Setup(
 							if i != 0 {
 								insertStmtBuf.WriteString(`,`)
 							}
-							fmt.Fprintf(&insertStmtBuf, `$%d`, len(params)+i+1)
+							fmt.Fprintf(&insertStmtBuf, `?`)
 						}
 						params = append(params, row...)
 						insertStmtBuf.WriteString(`)`)

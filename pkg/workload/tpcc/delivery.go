@@ -96,15 +96,25 @@ func (del delivery) run(
 			}
 			dIDoIDPairsStr := makeInTuples(dIDoIDPairs)
 
-			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
+			_, err := tx.ExecContext(ctx, fmt.Sprintf(`
 					UPDATE "order"
 					SET o_carrier_id = %d
-					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)
-					RETURNING o_d_id, o_c_id`,
+					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)`,
+				// RETURNING o_d_id, o_c_id`,
 				oCarrierID, wID, dIDoIDPairsStr))
 			if err != nil {
 				return err
 			}
+			// MySQL doesn't support RETURNING, so has to be executed in a separate query
+			rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
+					SELECT o_d_id, o_c_id 
+					FROM "order"
+					WHERE o_w_id = %d AND (o_d_id, o_id) IN (%s)`,
+				wID, dIDoIDPairsStr))
+			if err != nil {
+				return err
+			}
+
 			dIDcIDPairs := make(map[int]int)
 			for rows.Next() {
 				var dID, oCID int
@@ -113,6 +123,7 @@ func (del delivery) run(
 					return err
 				}
 				dIDcIDPairs[dID] = oCID
+				fmt.Println("RETURNING o_d_id, o_c_id...", dID, oCID)
 			}
 			if err := rows.Err(); err != nil {
 				return err

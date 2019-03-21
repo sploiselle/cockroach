@@ -19,7 +19,6 @@ import (
 	gosql "database/sql"
 	"math/rand"
 	"sync/atomic"
-	"time"
 
 	"github.com/pkg/errors"
 
@@ -48,7 +47,7 @@ type orderStatusData struct {
 	cLast      string
 	cBalance   float64
 	oID        int
-	oEntryD    time.Time
+	oEntryD    []uint8
 	oCarrierID gosql.NullInt64
 
 	items []orderItem
@@ -106,7 +105,7 @@ func (o orderStatus) run(
 			} else {
 				// Case 2: Pick the middle row, rounded up, from the selection by last name.
 				indexStr := "@customer_idx"
-				if config.usePostgres {
+				if config.usePostgres || config.useMySQL {
 					indexStr = ""
 				}
 				queryStr := fmt.Sprintf(`

@@ -545,11 +545,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:e8aed6a962c25dc86fa885a9386129a9f2bb6f641849dd09a698285e946accbc"
+  digest = "1:e7d2b08efdf41cda983b5c42458b50f78543b40de51be50f1c0e6338d48ad6a8"
   name = "github.com/go-sql-driver/mysql"
   packages = ["."]
   pruneopts = "UT"
-  revision = "2c9d54fefcfb443251f5b92cd5106cf4dc07b880"
+  revision = "1fbca2aabb09915d4f1006d01b271ad7778eec4f"
 
 [[projects]]
   digest = "1:aba848b77ff362b03db51ac06379c36a120bc05b4cc6c5c74f6e6fa310454fa5"
@@ -1282,6 +1282,14 @@
   pruneopts = "UT"
   revision = "4a180b209f5f494e5923cfce81ea30ba23915877"
   version = "v2.18.06"
+
+[[projects]]
+  branch = "master"
+  digest = "1:99c6a6dab47067c9b898e8c8b13d130c6ab4ffbcc4b7cc6236c2cd0b1e344f5b"
+  name = "github.com/shirou/w32"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "bb4de0191aa41b5507caa14b0650cdbddcd9280b"
 
 [[projects]]
   digest = "1:5f2aaa360f48d1711795bd88c7e45a38f86cf81e4bc01453d20983baa67e2d51"

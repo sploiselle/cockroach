@@ -252,18 +252,23 @@ func runInitImpl(
 			return err
 		}
 	}
+
 	if _, err := initDB.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS `+dbName); err != nil {
 		return err
 	}
 
-	if *useMySQL {
-		if _, err := initDB.ExecContext(ctx, `SET GLOBAL sql_mode = 'ansi_quotes'`); err != nil {
-			return err
-		}
-		if _, err := initDB.ExecContext(ctx, `SET SESSION sql_mode = 'ansi_quotes'`); err != nil {
-			return err
-		}
+	if _, err := initDB.ExecContext(ctx, `USE tpcc`); err != nil {
+		return err
 	}
+
+	// if *useMySQL {
+	// 	if _, err := initDB.ExecContext(ctx, `SET GLOBAL sql_mode = 'ansi_quotes'`); err != nil {
+	// 		return err
+	// 	}
+	// 	if _, err := initDB.ExecContext(ctx, `SET SESSION sql_mode = 'ansi_quotes'`); err != nil {
+	// 		return err
+	// 	}
+	// }
 
 	const batchSize = -1
 	// TODO(dan): Don't hardcode this. Similar to dbOverride, this should be
@@ -338,12 +343,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
-		if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
-			return err
-		}
-	}
+	// const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
+	// for _, table := range gen.Tables() {
+	// 	// if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
+	// 	// 	return err
+	// 	// }
+	// }
 
 	start := timeutil.Now()
 	errCh := make(chan error)

@@ -81,6 +81,15 @@ type newOrder struct{}
 
 var _ tpccTx = newOrder{}
 
+type stockID struct {
+	sIID int
+	sWId int
+}
+
+func (s stockID) String() string {
+	return fmt.Sprintf("(%d, %d)", s.sIID, s.sWId)
+}
+
 func (n newOrder) run(
 	ctx context.Context, config *tpcc, db *gosql.DB, wID int,
 ) (interface{}, error) {
@@ -167,15 +176,26 @@ func (n newOrder) run(
 		func(tx *gosql.Tx) error {
 			// Select the district tax rate and next available order number, bumping it.
 			var dNextOID int
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE district
 				SET d_next_o_id = d_next_o_id + 1
-				WHERE d_w_id = %[1]d AND d_id = %[2]d
-				RETURNING d_tax, d_next_o_id`,
+				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
+				// RETURNING d_tax, d_next_o_id`,
+				d.wID, d.dID),
+			); err != nil {
+				return err
+			}
+
+			// MySQL doesn't support RETURNING, so has to be executed in a separate query
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+				SELECT d_tax, d_next_o_id
+				FROM district
+				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
 				d.wID, d.dID),
 			).Scan(&d.dTax, &dNextOID); err != nil {
 				return err
 			}
+
 			d.oID = dNextOID - 1
 
 			// Select the warehouse tax rate.
@@ -248,16 +268,24 @@ func (n newOrder) run(
 			}
 			rows.Close()
 
-			stockIDs := make([]string, d.oOlCnt)
+			stockIDs := make([]stockID, d.oOlCnt)
 			for i, item := range d.items {
-				stockIDs[i] = fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
+				stockIDs[i] = stockID{
+					sIID: item.olIID,
+					sWId: item.olSupplyWID,
+				}
+				// fmt.Sprintf("(%d, %d)", item.olIID, item.olSupplyWID)
+			}
+			stockIDstrs := make([]string, len(stockIDs))
+			for i, v := range stockIDs {
+				stockIDstrs[i] = v.String()
 			}
 			rows, err = tx.QueryContext(ctx, fmt.Sprintf(`
 				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 				FROM stock
 				WHERE (s_i_id, s_w_id) IN (%[2]s)
 				ORDER BY s_i_id`,
-				d.dID, strings.Join(stockIDs, ", ")),
+				d.dID, strings.Join(stockIDstrs, ", ")),
 			)
 			if err != nil {
 				return err
@@ -301,10 +329,13 @@ func (n newOrder) run(
 					newSRemoteCnt++
 				}
 
-				sQuantityUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSQuantity)
-				sYtdUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sYtd+item.olQuantity)
-				sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], sOrderCnt+1)
-				sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN %s THEN %d", stockIDs[i], newSRemoteCnt)
+				sIID := stockIDs[i].sIID
+				sWId := stockIDs[i].sWId
+
+				sQuantityUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSQuantity)
+				sYtdUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sYtd+item.olQuantity)
+				sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sOrderCnt+1)
+				sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSRemoteCnt)
 			}
 			if rows.Next() {
 				return errors.New("extra stock row")
@@ -334,16 +365,16 @@ func (n newOrder) run(
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE stock
 				SET
-					s_quantity = CASE (s_i_id, s_w_id) %[1]s ELSE crdb_internal.force_error('', 'unknown case') END,
-					s_ytd = CASE (s_i_id, s_w_id) %[2]s END,
-					s_order_cnt = CASE (s_i_id, s_w_id) %[3]s END,
-					s_remote_cnt = CASE (s_i_id, s_w_id) %[4]s END
+					s_quantity = CASE %[1]s ELSE 0 END,
+					s_ytd = CASE %[2]s END,
+					s_order_cnt = CASE %[3]s END,
+					s_remote_cnt = CASE %[4]s END
 				WHERE (s_i_id, s_w_id) IN (%[5]s)`,
 				strings.Join(sQuantityUpdateCases, " "),
 				strings.Join(sYtdUpdateCases, " "),
 				strings.Join(sOrderCntUpdateCases, " "),
 				strings.Join(sRemoteCntUpdateCases, " "),
-				strings.Join(stockIDs, ", ")),
+				strings.Join(stockIDstrs, ", ")),
 			); err != nil {
 				return err
 			}

@@ -67,7 +67,7 @@ func SanitizeUrls(gen Generator, dbOverride string, urls []string) (string, erro
 		parsed.Path = dbName
 
 		switch parsed.Scheme {
-		case "postgres", "postgresql", "root":
+		case "postgres", "postgresql", "root", "tpcc":
 			urls[i] = parsed.String()
 		default:
 			return ``, fmt.Errorf(`unsupported scheme: %s`, parsed.Scheme)

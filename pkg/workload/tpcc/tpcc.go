@@ -216,30 +216,30 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// TODO(anyone): Remove this check. Once fixtures are
 				// regenerated and the meta version is bumped on this workload,
 				// we won't need it anymore.
-				{
-					const q = `SELECT column_name
-						       FROM information_schema.statistics
-						       WHERE index_name = 'order_line_fk'
-						         AND seq_in_index = 2`
-					var fkCol string
-					if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
-						return err
-					}
-					var fkStmt string
-					switch fkCol {
-					case "ol_i_id":
-						// The corrected column. When the TODO above is addressed,
-						// this should be moved into fkStmts.
-						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
-					case "ol_d_id":
-						// The old, incorrect column. When the TODO above is addressed,
-						// this should be removed entirely.
-						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
-					default:
-						return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
-					}
-					fkStmts = append(fkStmts, fkStmt)
-				}
+				// {
+				// 	const q = `SELECT column_name
+				// 		       FROM information_schema.statistics
+				// 		       WHERE index_name = 'order_line_fk'
+				// 		         AND seq_in_index = 2`
+				// 	var fkCol string
+				// 	if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
+				// 		return err
+				// 	}
+				// 	var fkStmt string
+				// 	switch fkCol {
+				// 	case "ol_i_id":
+				// 		// The corrected column. When the TODO above is addressed,
+				// 		// this should be moved into fkStmts.
+				// 		fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
+				// 	case "ol_d_id":
+				// 		// The old, incorrect column. When the TODO above is addressed,
+				// 		// this should be removed entirely.
+				// 		fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
+				// 	default:
+				// 		return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
+				// 	}
+				// 	fkStmts = append(fkStmts, fkStmt)
+				// }
 
 				for _, fkStmt := range fkStmts {
 					if _, err := sqlDB.Exec(fkStmt); err != nil {
@@ -432,22 +432,22 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 	// We're adding this check here because repartitioning a table can take
 	// upwards of 10 minutes so if a cluster is already set up correctly we won't
 	// do this operation again.
-	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
+	// alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
+	// if err != nil {
+	// 	return workload.QueryLoad{}, err
+	// }
 
-	if !alreadyPartitioned {
-		if w.split {
-			splitTables(dbs[0], w.warehouses)
+	// if !alreadyPartitioned {
+	// 	if w.split {
+	// 		splitTables(dbs[0], w.warehouses)
 
-			if w.partitions > 0 {
-				partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
-			}
-		}
-	} else {
-		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
-	}
+	// 		if w.partitions > 0 {
+	// 			partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
+	// 		}
+	// 	}
+	// } else {
+	// 	fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
+	// }
 
 	if w.scatter {
 		scatterRanges(dbs[0])

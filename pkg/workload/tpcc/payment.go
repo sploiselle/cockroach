@@ -64,7 +64,7 @@ type paymentData struct {
 	cState     string
 	cZip       string
 	cPhone     string
-	cSince     time.Time
+	cSince     []uint8
 	cCredit    string
 	cCreditLim float64
 	cDiscount  float64
@@ -126,23 +126,42 @@ func (p payment) run(
 		func(tx *gosql.Tx) error {
 			var wName, dName string
 			// Update warehouse with payment
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE warehouse
 				SET w_ytd = w_ytd + %[1]f
-				WHERE w_id = %[2]d
-				RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`,
+				WHERE w_id = %[2]d`,
+				// RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`,
 				d.hAmount, wID),
+			); err != nil {
+				return err
+			}
+
+			// MySQL doesn't support RETURNING, so has to be executed in a separate query
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+				SELECT w_name, w_street_1, w_street_2, w_city, w_state, w_zip
+				FROM warehouse
+				WHERE w_id = %[1]d`,
+				wID),
 			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
 				return err
 			}
 
 			// Update district with payment
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE district
 				SET d_ytd = d_ytd + %[1]f
-				WHERE d_w_id = %[2]d AND d_id = %[3]d
-				RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
+				WHERE d_w_id = %[2]d AND d_id = %[3]d`,
+				// RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
 				d.hAmount, wID, d.dID),
+			); err != nil {
+				return err
+			}
+
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+				SELECT d_name, d_street_1, d_street_2, d_city, d_state, d_zip
+				FROM district
+				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
+				wID, d.dID),
 			).Scan(&dName, &d.dStreet1, &d.dStreet2, &d.dCity, &d.dState, &d.dZip); err != nil {
 				return err
 			}
@@ -152,7 +171,7 @@ func (p payment) run(
 			if d.cID == 0 {
 				// 2.5.2.2 Case 2: Pick the middle row, rounded up, from the selection by last name.
 				indexStr := "@customer_idx"
-				if config.usePostgres {
+				if config.usePostgres || config.useMySQL {
 					indexStr = ""
 				}
 				rows, err := tx.QueryContext(ctx, fmt.Sprintf(`
@@ -190,18 +209,43 @@ func (p payment) run(
 			// If the customer has bad credit, update the customer's C_DATA and return
 			// the first 200 characters of it, which is supposed to get displayed by
 			// the terminal. See 2.5.3.3 and 2.5.2.2.
-			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(`
 				UPDATE customer
-				SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =
-					(c_balance - %[1]f, c_ytd_payment + %[1]f, c_payment_cnt + 1,
-					 case c_credit when 'BC' then
-					 left(c_id::text || c_d_id::text || c_w_id::text || %[5]d::text || %[6]d::text || %[1]f::text || c_data, 500)
-					 else c_data end)
-				WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_id = %[4]d
-				RETURNING c_first, c_middle, c_last, c_street_1, c_street_2,
-						  c_city, c_state, c_zip, c_phone, c_since, c_credit,
-						  c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`,
+				SET
+					c_balance = c_balance - %[1]f, 
+					c_ytd_payment = c_ytd_payment + %[1]f, 
+					c_payment_cnt = c_payment_cnt + 1, 
+					c_data = case 
+						c_credit when 'BC' then
+					 	left(
+							CONCAT(
+								 CAST(c_id AS CHAR), 
+								 CAST(c_d_id AS CHAR), 
+								 CAST(c_w_id AS CHAR), 
+								 '%[5]d', 
+								 '%[6]d', 
+								 '%[1]f', 
+								 c_data
+							), 
+							500
+						)
+					 	else c_data end
+				WHERE c_w_id = %[2]d AND c_d_id = %[3]d AND c_id = %[4]d`,
+				// RETURNING c_first, c_middle, c_last, c_street_1, c_street_2,
+				// 		  c_city, c_state, c_zip, c_phone, c_since, c_credit,
+				// 		  c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`,
 				d.hAmount, d.cWID, d.cDID, d.cID, d.dID, wID),
+			); err != nil {
+				return err
+			}
+
+			if err := tx.QueryRowContext(ctx, fmt.Sprintf(`
+				SELECT c_first, c_middle, c_last, c_street_1, c_street_2,
+					c_city, c_state, c_zip, c_phone, c_since, c_credit,
+					c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end
+				FROM customer
+				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
+				d.cWID, d.cDID, d.cID),
 			).Scan(&d.cFirst, &d.cMiddle, &d.cLast, &d.cStreet1, &d.cStreet2,
 				&d.cCity, &d.cState, &d.cZip, &d.cPhone, &d.cSince, &d.cCredit,
 				&d.cCreditLim, &d.cDiscount, &d.cBalance, &d.cData,
