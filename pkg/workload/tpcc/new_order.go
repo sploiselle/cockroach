@@ -478,7 +478,7 @@ func (n newOrder) run(
 
 			// 2.4.2.2: total_amount = sum(OL_AMOUNT) * (1 - C_DISCOUNT) * (1 + W_TAX + D_TAX)
 			d.totalAmount *= (1 - d.cDiscount) * (1 + d.wTax + d.dTax)
-			fmt.Println("new order sequence completed")
+			// fmt.Println("new order sequence completed")
 			return nil
 		})
 	if err == errSimulated {

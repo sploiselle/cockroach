@@ -17,6 +17,7 @@ package tpcc
 
 import (
 	"context"
+	"database/sql"
 	gosql "database/sql"
 	"math/rand"
 	"net/url"
@@ -40,6 +41,7 @@ type tpcc struct {
 	seed             int64
 	warehouses       int
 	activeWarehouses int
+	connections      int
 	interleaved      bool
 	nowString        string
 
@@ -118,6 +120,7 @@ var tpccMeta = workload.Meta{
 
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
+		g.flags.IntVar(&g.connections, `connections`, 0, `Number of connections`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
@@ -385,12 +388,29 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	nConns := w.activeWarehouses / len(urls)
+	var nConns int
+
+	if w.connections == 0 {
+		nConns = w.activeWarehouses / len(urls)
+	} else {
+		nConns = w.connections
+	}
+
 	dbs := make([]*gosql.DB, len(urls))
 	for i, url := range urls {
 		if w.useMySQL {
-			fmt.Println("url", url)
 			dbs[i], err = gosql.Open(`mysql`, url)
+			var col string
+			row := dbs[i].QueryRow(`SELECT @@sql_mode;`)
+			err := row.Scan(&col)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					fmt.Println("Zero rows found")
+				} else {
+					panic(err)
+				}
+			}
+			fmt.Printf("%s\n", col)
 		} else {
 			dbs[i], err = gosql.Open(`postgres`, url)
 		}
@@ -402,26 +422,6 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		dbs[i].SetMaxOpenConns(nConns)
 		dbs[i].SetMaxIdleConns(nConns)
 	}
-
-	// We're adding this check here because repartitioning a table can take
-	// upwards of 10 minutes so if a cluster is already set up correctly we won't
-	// do this operation again.
-	// alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0])
-	// if err != nil {
-	// 	return workload.QueryLoad{}, err
-	// }
-
-	// if !alreadyPartitioned {
-	// 	if w.split {
-	// 		splitTables(dbs[0], w.warehouses)
-
-	// 		if w.partitions > 0 {
-	// 			partitionTables(dbs[0], w.warehouses, w.partitions, w.zones)
-	// 		}
-	// 	}
-	// } else {
-	// 	fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
-	// }
 
 	if w.scatter {
 		scatterRanges(dbs[0])
