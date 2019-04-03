@@ -201,6 +201,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 			return initializeMix(w)
 		},
 		PostLoad: func(sqlDB *gosql.DB) error {
+			fmt.Println("Postloading")
 			if w.fks {
 				fkStmts := []string{
 					`alter table tpcc.district add foreign key (d_w_id) references tpcc.warehouse (w_id)`,
@@ -213,34 +214,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 					`alter table tpcc.order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references tpcc."order" (o_w_id, o_d_id, o_id)`,
 				}
 
-				// TODO(anyone): Remove this check. Once fixtures are
-				// regenerated and the meta version is bumped on this workload,
-				// we won't need it anymore.
-				// {
-				// 	const q = `SELECT column_name
-				// 		       FROM information_schema.statistics
-				// 		       WHERE index_name = 'order_line_fk'
-				// 		         AND seq_in_index = 2`
-				// 	var fkCol string
-				// 	if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
-				// 		return err
-				// 	}
-				// 	var fkStmt string
-				// 	switch fkCol {
-				// 	case "ol_i_id":
-				// 		// The corrected column. When the TODO above is addressed,
-				// 		// this should be moved into fkStmts.
-				// 		fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
-				// 	case "ol_d_id":
-				// 		// The old, incorrect column. When the TODO above is addressed,
-				// 		// this should be removed entirely.
-				// 		fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
-				// 	default:
-				// 		return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
-				// 	}
-				// 	fkStmts = append(fkStmts, fkStmt)
-				// }
-
 				for _, fkStmt := range fkStmts {
 					if _, err := sqlDB.Exec(fkStmt); err != nil {
 						// If the statement failed because the fk already exists,
@@ -252,6 +225,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					}
 				}
 			}
+			fmt.Println("Done postloading")
 			return nil
 		},
 		PostRun: func(startElapsed time.Duration) error {

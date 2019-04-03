@@ -343,13 +343,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 
-	// const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	// for _, table := range gen.Tables() {
-	// 	// if err := workload.Split(ctx, initDB, table, splitConcurrency); err != nil {
-	// 	// 	return err
-	// 	// }
-	// }
-
 	start := timeutil.Now()
 	errCh := make(chan error)
 	var rampDone chan struct{}
@@ -528,7 +521,6 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 					}
 				}
 			}
-
 			return nil
 		}
 	}

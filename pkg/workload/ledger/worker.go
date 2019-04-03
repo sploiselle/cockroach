@@ -126,3 +126,10 @@ func (w *worker) run(ctx context.Context) error {
 	w.hists.Get(t.name).Record(elapsed)
 	return nil
 }
+
+func (w *worker) closeConn() error {
+	if err := w.db.Close(); err != nil {
+		return err
+	}
+	return nil
+}

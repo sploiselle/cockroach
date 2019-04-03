@@ -133,6 +133,7 @@ func (p payment) run(
 				// RETURNING w_name, w_street_1, w_street_2, w_city, w_state, w_zip`,
 				d.hAmount, wID),
 			); err != nil {
+				fmt.Println("UPDATE warehouse")
 				return err
 			}
 
@@ -143,6 +144,8 @@ func (p payment) run(
 				WHERE w_id = %[1]d`,
 				wID),
 			).Scan(&wName, &d.wStreet1, &d.wStreet2, &d.wCity, &d.wState, &d.wZip); err != nil {
+
+				fmt.Println("SELECT w_name, w_street_1, w_street_2, w_city, w_state, w_zip")
 				return err
 			}
 
@@ -154,6 +157,13 @@ func (p payment) run(
 				// RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
 				d.hAmount, wID, d.dID),
 			); err != nil {
+				fmt.Printf(`
+				UPDATE district
+				SET d_ytd = d_ytd + %[1]f
+				WHERE d_w_id = %[2]d AND d_id = %[3]d\n`,
+					// RETURNING d_name, d_street_1, d_street_2, d_city, d_state, d_zip`,
+					d.hAmount, wID, d.dID)
+
 				return err
 			}
 
@@ -163,6 +173,8 @@ func (p payment) run(
 				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
 				wID, d.dID),
 			).Scan(&dName, &d.dStreet1, &d.dStreet2, &d.dCity, &d.dState, &d.dZip); err != nil {
+
+				fmt.Println("SELECT d_name, d_street_1, d_street_2, d_city, d_state, d_zip")
 				return err
 			}
 
@@ -236,6 +248,8 @@ func (p payment) run(
 				// 		  c_credit_lim, c_discount, c_balance, case c_credit when 'BC' then left(c_data, 200) else '' end`,
 				d.hAmount, d.cWID, d.cDID, d.cID, d.dID, wID),
 			); err != nil {
+				fmt.Println("UPDATE customer SET")
+
 				return err
 			}
 
@@ -264,7 +278,9 @@ func (p payment) run(
 			)
 			return err
 		}); err != nil {
+		fmt.Println("Error in payment sequence")
 		return nil, err
 	}
+
 	return d, nil
 }

@@ -123,7 +123,6 @@ func (del delivery) run(
 					return err
 				}
 				dIDcIDPairs[dID] = oCID
-				fmt.Println("RETURNING o_d_id, o_c_id...", dID, oCID)
 			}
 			if err := rows.Err(); err != nil {
 				return err
