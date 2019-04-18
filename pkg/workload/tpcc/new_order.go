@@ -87,7 +87,7 @@ type stockID struct {
 }
 
 func (s stockID) String() string {
-	return fmt.Sprintf("(s_i_id = %d AND s_w_id = %d)", s.sIID, s.sWId)
+	return fmt.Sprintf("%d", s.sIID)
 }
 
 func (n newOrder) run(
@@ -296,6 +296,7 @@ func (n newOrder) run(
 			rows.Close()
 
 			stockIDs := make([]stockID, d.oOlCnt)
+			sWID := d.items[0].olSupplyWID
 			for i, item := range d.items {
 				stockIDs[i] = stockID{
 					sIID: item.olIID,
@@ -318,18 +319,18 @@ func (n newOrder) run(
 			rows, err = tx.QueryContext(ctx, fmt.Sprintf(`
 				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 				FROM stock
-				WHERE (%[2]s)
+				WHERE s_w_id = %[2]d AND s_i_id IN (%[3]s)
 				ORDER BY s_i_id`,
-				d.dID, strings.Join(stockIDstrs, " OR ")),
+				d.dID, sWID, strings.Join(stockIDstrs, " , ")),
 			)
 			if err != nil {
 				fmt.Printf(`
 				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
 				FROM stock
-				WHERE (%[2]s)
+				WHERE s_w_id = %[2]d AND s_i_id IN (%[3]s)
 				ORDER BY s_i_id
 				`,
-					d.dID, strings.Join(stockIDstrs, " OR "))
+					d.dID, sWID, strings.Join(stockIDstrs, " , "))
 				return err
 			}
 
@@ -373,12 +374,17 @@ func (n newOrder) run(
 				}
 
 				sIID := stockIDs[i].sIID
-				sWId := stockIDs[i].sWId
+				// sWId := stockIDs[i].sWId
 
-				sQuantityUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSQuantity)
-				sYtdUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sYtd+item.olQuantity)
-				sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sOrderCnt+1)
-				sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSRemoteCnt)
+				// sQuantityUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSQuantity)
+				// sYtdUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sYtd+item.olQuantity)
+				// sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, sOrderCnt+1)
+				// sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d AND s_w_id = %d THEN %d", sIID, sWId, newSRemoteCnt)
+
+				sQuantityUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d THEN %d", sIID, newSQuantity)
+				sYtdUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d THEN %d", sIID, sYtd+item.olQuantity)
+				sOrderCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d THEN %d", sIID, sOrderCnt+1)
+				sRemoteCntUpdateCases[i] = fmt.Sprintf("WHEN s_i_id = %d THEN %d", sIID, newSRemoteCnt)
 			}
 			if rows.Next() {
 				return errors.New("extra stock row")
@@ -422,12 +428,13 @@ func (n newOrder) run(
 					s_ytd = CASE %[2]s END,
 					s_order_cnt = CASE %[3]s END,
 					s_remote_cnt = CASE %[4]s END
-				WHERE (%[5]s)`,
+					WHERE s_w_id = %[5]d AND s_i_id IN (%[6]s)`,
 				strings.Join(sQuantityUpdateCases, " "),
 				strings.Join(sYtdUpdateCases, " "),
 				strings.Join(sOrderCntUpdateCases, " "),
 				strings.Join(sRemoteCntUpdateCases, " "),
-				strings.Join(stockIDstrs, " OR ")),
+				sWID,
+				strings.Join(stockIDstrs, " , ")),
 			); err != nil {
 				fmt.Printf(`
 				UPDATE stock
@@ -436,12 +443,13 @@ func (n newOrder) run(
 					s_ytd = CASE %[2]s END,
 					s_order_cnt = CASE %[3]s END,
 					s_remote_cnt = CASE %[4]s END
-				WHERE (%[5]s)`,
+					WHERE s_w_id = %[5]d AND s_i_id IN (%[6]s)`,
 					strings.Join(sQuantityUpdateCases, " "),
 					strings.Join(sYtdUpdateCases, " "),
 					strings.Join(sOrderCntUpdateCases, " "),
 					strings.Join(sRemoteCntUpdateCases, " "),
-					strings.Join(stockIDstrs, " OR "))
+					sWID,
+					strings.Join(stockIDstrs, " , "))
 				return err
 			}
 
