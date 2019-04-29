@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -183,8 +184,67 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, n diagnosticspb.
 	url.RawQuery = q.Encode()
 }
 
+type awsInstanceRes struct {
+	InstanceType string `json:"instanceType"`
+}
+
+func checkAWSMachineType() (bool, string) {
+	timeout := time.Duration(1 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+
+	resp, err := client.Get("http://169.254.169.254/latest/dynamic/instance-identity/document")
+	if err != nil {
+		return false, "", ""
+	}
+
+	defer resp.Body.Close()
+	var instanceType awsInstanceRes
+	detected = true
+	if err := json.NewDecoder(resp.Body).Decode(&instanceType); err != nil {
+		detected = false
+	}
+
+	return detected, "aws", instanceType.InstanceType
+}
+
+func checkGCPMachineType() (bool, string) {
+
+	timeout := time.Duration(1 * time.Second)
+	client := http.Client{
+		Timeout: timeout,
+	}
+
+	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/machine-type", nil)
+	if err != nil {
+		return false, ""
+	}
+
+	req.Header.Set("Metadata-Flavor", "Google")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return false, ""
+	}
+
+	defer resp.Body.Close()
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
+	newStr := buf.String()
+
+	components := strings.Split(newStr, "/")
+	if len(components) < 4 {
+		return false, "", ""
+	}
+	fmt.Printf("%v\n", components[len(components)-1])
+
+	return true, "gcp", components[len(components)-1]
+}
+
 func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 	// Fill in hardware info (OS/CPU/Mem/etc).
+
 	if platform, family, version, err := host.PlatformInformation(); err == nil {
 		n.Os.Family = family
 		n.Os.Platform = platform
@@ -213,6 +273,19 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 	if l, err := load.AvgWithContext(ctx); err == nil {
 		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
+
+	detected, provider, machineType := checkAWSMachineType()
+
+	if !detected {
+		detected, provider, machineType = checkGCPMachineType()
+	}
+
+	if !detected {
+		provider = "NULL"
+		machineType = "NULL"
+	}
+
+	fmt.Printf("%v on %v\n", machineType, provider)
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
