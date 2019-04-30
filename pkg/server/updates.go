@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"net/url"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -184,62 +185,133 @@ func addInfoToURL(ctx context.Context, url *url.URL, s *Server, n diagnosticspb.
 	url.RawQuery = q.Encode()
 }
 
-type awsInstanceRes struct {
-	InstanceType string `json:"instanceType"`
+type awsInstanceMetadata struct {
+	InstanceClass string `json:"instanceType"`
 }
 
-func checkAWSMachineType() (bool, string) {
+// checkAWSInstanceClass leverages AWS instance metadata (aka
+// Instance Identity Documents)  to determine the node's machine type.
+// Details about this API can be found at
+// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-identity-documents.html
+// We assume that either a failed GET request or incompatible
+// JSON indicates we are not running on AWS.
+func checkAWSInstanceClass() (bool, string, string) {
 	timeout := time.Duration(1 * time.Second)
 	client := http.Client{
 		Timeout: timeout,
 	}
 
-	resp, err := client.Get("http://169.254.169.254/latest/dynamic/instance-identity/document")
-	if err != nil {
+	if resp, err := client.Get(
+		"http://instance-data.ec2.internal/latest/dynamic/instance-identity/document",
+	); err != nil {
 		return false, "", ""
 	}
 
 	defer resp.Body.Close()
-	var instanceType awsInstanceRes
-	detected = true
-	if err := json.NewDecoder(resp.Body).Decode(&instanceType); err != nil {
+	var instanceMetadata awsInstanceMetadata
+	detected := true
+	if err := json.NewDecoder(resp.Body).Decode(&instanceMetadata); err != nil {
 		detected = false
 	}
 
-	return detected, "aws", instanceType.InstanceType
+	return detected, "aws", instanceMetadata.InstanceClass
 }
 
-func checkGCPMachineType() (bool, string) {
+// checkGCPInstanceClass leverages GCP instance metadata to
+// determine the node's machine type. Details about this API can be found at
+// https://cloud.google.com/compute/docs/storing-retrieving-metadata
+// We assume that either a failed GET request or differently formatted JSON
+// responsesindicates that we are not running on GCP.
+func checkGCPInstanceClass() (bool, string, string) {
 
-	timeout := time.Duration(1 * time.Second)
 	client := http.Client{
-		Timeout: timeout,
+		Timeout: time.Duration(500 * time.Millisecond),
 	}
 
-	req, err := http.NewRequest("GET", "http://metadata.google.internal/computeMetadata/v1/instance/machine-type", nil)
-	if err != nil {
-		return false, ""
+	if req, err := http.NewRequest(
+		"GET",
+		"http://metadata.google.internal/computeMetadata/v1/instance/machine-type",
+		nil,
+	); err != nil {
+		return false, "", ""
 	}
 
 	req.Header.Set("Metadata-Flavor", "Google")
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return false, ""
+	if resp, err := client.Do(req); err != nil {
+		return false, "", ""
 	}
 
 	defer resp.Body.Close()
 	buf := new(bytes.Buffer)
 	buf.ReadFrom(resp.Body)
-	newStr := buf.String()
+	respStr := buf.String()
 
-	components := strings.Split(newStr, "/")
-	if len(components) < 4 {
+	// The structure of the API's response can be found at its documentation linked
+	// in the function description; look for machine-type
+	instanceClassRE := regexp.MustCompile(`machineTypes\/(.+)$`)
+
+	instanceClass := machineTypeRE.FindStringSubmatch(respStr)
+
+	return true, "gcp", instanceClass[1]
+}
+
+type azureInstanceMetadata struct {
+	ComputeEnv struct {
+		InstanceClass string `json:"vmSize"`
+	} `json:"compute"`
+}
+
+// checkAzureInstanceClass leverages Azure instance metadata to
+// determine the node's machine type. Details about this API can be found at
+// https://docs.microsoft.com/en-us/azure/virtual-machines/windows/instance-metadata-service
+// We assume that either a failed GET request or differently formatted JSON
+// responses indicate that we are not running on Azure.
+func checkAzureInstanceClass() (bool, string, string) {
+
+	client := http.Client{
+		Timeout: time.Duration(500 * time.Millisecond),
+	}
+
+	if req, err := http.NewRequest(
+		"GET",
+		"http://169.254.169.254/metadata/instance?api-version=2018-10-01",
+		nil,
+	); err != nil {
 		return false, "", ""
 	}
-	fmt.Printf("%v\n", components[len(components)-1])
 
-	return true, "gcp", components[len(components)-1]
+	req.Header.Set("Metadata", "true")
+
+	if resp, err := client.Do(req); err != nil {
+		return false, "", ""
+	}
+	defer resp.Body.Close()
+
+	var instanceMetadata azureInstanceMetadata
+
+	detected := true
+	if err := json.NewDecoder(resp.Body).Decode(&instanceMetadata); err != nil {
+		detected = false
+	}
+
+	return detected, "azure", instanceMetadata.ComputeEnv.InstanceClass
+}
+
+func getProviderInfo() (string, string) {
+
+	detectedProvider, provider, instanceClass := checkAWSInstanceClass()
+
+	if !detectedProvider {
+		detectedProvider, provider, instanceClass = checkGCPInstanceClass()
+	}
+
+	if !detectedProvider {
+		detectedProvider, provider, instanceClass = checkAzureInstanceClass()
+	}
+	fmt.Printf("%v on %v\n", instanceClass, provider)
+
+	return provider, instanceClass
 }
 
 func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
@@ -274,18 +346,7 @@ func fillHardwareInfo(ctx context.Context, n *diagnosticspb.NodeInfo) {
 		n.Hardware.Loadavg15 = float32(l.Load15)
 	}
 
-	detected, provider, machineType := checkAWSMachineType()
-
-	if !detected {
-		detected, provider, machineType = checkGCPMachineType()
-	}
-
-	if !detected {
-		provider = "NULL"
-		machineType = "NULL"
-	}
-
-	fmt.Printf("%v on %v\n", machineType, provider)
+	n.Hardware.Provider, n.Hardware.InstanceClass = getProviderInfo()
 }
 
 // checkForUpdates calls home to check for new versions for the current platform
