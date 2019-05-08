@@ -84,6 +84,11 @@ type tpcc struct {
 	localsPool *sync.Pool
 }
 
+type TPCCResults struct {
+	tpmc       float64
+	warehouses int
+}
+
 func init() {
 	workload.Register(tpccMeta)
 }
@@ -286,15 +291,16 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			return w.partitionAndScatterWithDB(db)
 		},
-		PostRun: func(startElapsed time.Duration) error {
+		PostRun: func(startElapsed time.Duration) (workload.WorkloadResults, error) {
 			w.auditor.runChecks()
 			const totalHeader = "\n_elapsed_______tpmC____efc__avg(ms)__p50(ms)__p90(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader)
 
 			const newOrderName = `newOrder`
+			var tpmC float64
 			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
-					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
+					tpmC = float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
@@ -308,7 +314,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					)
 				}
 			})
-			return nil
+			return workload.WorkloadResults(TPCCResults{tpmC, w.activeWarehouses}), nil
 		},
 		CheckConsistency: func(ctx context.Context, db *gosql.DB) error {
 			// TODO(arjun): We should run each test in a single transaction as

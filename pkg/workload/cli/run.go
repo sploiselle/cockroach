@@ -516,11 +516,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			printTotalHist(resultTick)
 
 			if h, ok := gen.(workload.Hookser); ok {
-				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(startElapsed); err != nil {
-						fmt.Printf("failed post-run hook: %v\n", err)
-					}
+				// if _, err := h.Hooks().PostRun; err != nil {
+				if _, err := h.Hooks().PostRun(startElapsed); err != nil {
+					fmt.Printf("failed post-run hook: %v\n", err)
 				}
+				// }
 			}
 
 			return nil

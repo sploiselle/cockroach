@@ -21,7 +21,9 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
@@ -31,12 +33,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -282,6 +286,20 @@ func startPProfEndPoint(ctx context.Context) {
 	}()
 }
 
+// type NodeDetail struct {
+// 	Desct struct{
+// 		Address struct{
+// 			AddressField `json:""`
+// 		}`json:"address"`
+// 	}`json:"desc"`
+// } `json:""`
+
+// type workloadRunDetails struct {
+// 	dbVersion string
+// 	nodes     []nodeDetail
+// 	results   workload.WorkloadResults
+// }
+
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
 
@@ -496,15 +514,60 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Println(totalHeader + `__result`)
 			printTotalHist(resultTick)
 
+			var results workload.WorkloadResults
 			if h, ok := gen.(workload.Hookser); ok {
-				if h.Hooks().PostRun != nil {
-					if err := h.Hooks().PostRun(startElapsed); err != nil {
-						fmt.Printf("failed post-run hook: %v\n", err)
-					}
+				results, err = h.Hooks().PostRun(startElapsed)
+				fmt.Println(results)
+				if err != nil {
+					// if _, err := h.Hooks().PostRun(startElapsed); err != nil {
+					fmt.Printf("failed post-run hook: %v\n", err)
+					// }
 				}
 			}
 
-			fmt.Printf("\n\nSENDING YOUR STATS\n\n%s\n", jsonBuf.String())
+			// wrd := workloadRunDetails{}
+
+			u, err := url.Parse(urls[0])
+
+			req := &url.URL{
+				Scheme: "http",
+				Host:   u.Hostname() + ":8080",
+				Path:   "_status/nodes",
+				// RawQuery: u.RequestURI(),
+			}
+
+			res, err := http.Get(req.String())
+
+			if err != nil {
+				fmt.Println("Sad %v", err)
+			}
+
+			body, err := ioutil.ReadAll(res.Body)
+
+			if err != nil {
+				fmt.Println("Sad %v", err)
+			}
+
+			nodeDetails := &serverpb.NodesResponse{}
+
+			err = json.Unmarshal(body, nodeDetails)
+			if err != nil {
+				log.Fatal(context.TODO(), "unmarshaling error: ", err)
+			}
+
+			fmt.Println(nodeDetails)
+
+			// versionRow := initDB.QueryRow(`SELECT value FROM crdb_internal.node_build_info where field = 'Version'`)
+			// versionRow.Scan(wrd.dbVersion)
+
+			switch gen.Meta().Name {
+			case "tpcc":
+				tpccResults := results.(tpcc.TPCCResults)
+				fmt.Printf("\n\nSENDING YOUR STATS\n\n%v\n", tpccResults)
+			default:
+				fmt.Println("Workload not supported for")
+
+			}
 
 			return nil
 		}

@@ -95,6 +95,8 @@ type Hookser interface {
 	Hooks() Hooks
 }
 
+type WorkloadResults interface{}
+
 // Hooks stores functions to be called at points in the workload lifecycle.
 type Hooks struct {
 	// Validate is called after workload flags are parsed. It should return an
@@ -109,8 +111,9 @@ type Hooks struct {
 	// creating foreign keys should go. Implementations should be idempotent.
 	PostLoad func(*gosql.DB) error
 	// PostRun is called after workload run has ended, with the duration of the
-	// run. This is where any post-run special printing or validation can be done.
-	PostRun func(time.Duration) error
+	// run. This is where any post-run special printing or validation can be done,
+	// as well as returning a struct representing the workload's results.
+	PostRun func(time.Duration) (WorkloadResults, error)
 	// CheckConsistency is called to run generator-specific consistency checks.
 	// These are expected to pass after the initial data load as well as after
 	// running queryload.
