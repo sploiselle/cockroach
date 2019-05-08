@@ -21,7 +21,6 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -32,6 +31,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/golang/protobuf/jsonpb"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -542,15 +543,16 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				fmt.Println("Sad %v", err)
 			}
 
-			body, err := ioutil.ReadAll(res.Body)
+			// body, err := ioutil.ReadAll(res.Body)
 
-			if err != nil {
-				fmt.Println("Sad %v", err)
-			}
+			// if err != nil {
+			// 	fmt.Println("Sad %v", err)
+			// }
 
 			nodeDetails := &serverpb.NodesResponse{}
 
-			err = json.Unmarshal(body, nodeDetails)
+			err = jsonpb.Unmarshal(res.Body, nodeDetails)
+
 			if err != nil {
 				log.Fatal(context.TODO(), "unmarshaling error: ", err)
 			}
