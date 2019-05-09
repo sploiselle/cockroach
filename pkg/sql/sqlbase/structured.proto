@@ -34,7 +34,7 @@ enum ConstraintValidity {
 
 message ForeignKeyReference {
   enum Action {
-    option (gogoproto.goproto_enum_stringer) = false;
+    // option (gogoproto.goproto_enum_stringer) = false;
     NO_ACTION = 0;
     RESTRICT = 1;
     SET_NULL = 2;
@@ -44,7 +44,7 @@ message ForeignKeyReference {
 
   // Match is the algorithm used to compare composite keys.
   enum Match {
-    option (gogoproto.goproto_enum_stringer) = false;
+    // option (gogoproto.goproto_enum_stringer) = false;
     SIMPLE = 0;
     FULL = 1;
     PARTIAL = 2; // Note: not actually supported, but we reserve the value for future use.

@@ -21,9 +21,10 @@ import (
 	gosql "database/sql"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"net/http"
-	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"runtime"
 	"strconv"
@@ -32,16 +33,16 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/protobuf/jsonpb"
+	// "github.com/gogo/protobuf/json"
+	"github.com/gogo/protobuf/proto"
 
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
-	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -56,6 +57,7 @@ var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run"
 var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init")
 var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
+var cluster = runFlags.String("cluster", "", "The name of the roachproad cluster use")
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
@@ -136,7 +138,6 @@ func init() {
 func CmdHelper(
 	gen workload.Generator, fn func(gen workload.Generator, urls []string, dbName string) error,
 ) func(*cobra.Command, []string) {
-	const crdbDefaultURL = `postgres://root@localhost:26257?sslmode=disable`
 
 	return HandleErrs(func(cmd *cobra.Command, args []string) error {
 		if ls := cmd.Flags().Lookup(logflags.LogToStderrName); ls != nil {
@@ -162,9 +163,27 @@ func CmdHelper(
 			dbOverride = dbFlag.Value.String()
 		}
 		urls := args
+		fmt.Println("args", args)
 		if len(urls) == 0 {
-			urls = []string{crdbDefaultURL}
+			fmt.Println("Processing args")
+			cmd := exec.Command("roachprod", "pgurl", *cluster, "--external")
+
+			var out bytes.Buffer
+			cmd.Stdout = &out
+			err := cmd.Run()
+			if err != nil {
+				log.Fatal(context.TODO(), err)
+			}
+
+			pgURLs := strings.Split(out.String(), " ")
+
+			s := pgURLs[0]
+			fmt.Println("s", s)
+			s = s[1 : len(s)-1]
+
+			urls = []string{s}
 		}
+		fmt.Println("urls", urls)
 		dbName, err := workload.SanitizeUrls(gen, dbOverride, urls)
 		if err != nil {
 			return err
@@ -287,22 +306,58 @@ func startPProfEndPoint(ctx context.Context) {
 	}()
 }
 
-// type NodeDetail struct {
-// 	Desct struct{
-// 		Address struct{
-// 			AddressField `json:""`
-// 		}`json:"address"`
-// 	}`json:"desc"`
-// } `json:""`
+type NodeDetail struct {
+	provider      string
+	instanceClass string
+}
 
-// type workloadRunDetails struct {
-// 	dbVersion string
-// 	nodes     []nodeDetail
-// 	results   workload.WorkloadResults
-// }
+type WorkloadRunDetails struct {
+	workload  string
+	dbVersion string
+	nodes     []NodeDetail
+	results   workload.WorkloadResults
+}
+
+func checkClusterExistence() error {
+	if *cluster == "" {
+		return errors.New("--cluster not specified")
+	}
+
+	cmd := exec.Command("roachprod", "status", *cluster)
+
+	if err := cmd.Run(); err != nil {
+		return errors.New("roachprod cannot find status of cluster " + *cluster)
+	}
+
+	return nil
+}
+
+func checkWorkloadSupport(workload string) error {
+	switch workload {
+	case "tpcc":
+		return nil
+	default:
+		return errors.New(fmt.Sprintf("%v not supported by perf-collector", workload))
+	}
+}
 
 func runRun(gen workload.Generator, urls []string, dbName string) error {
 	ctx := context.Background()
+
+	if err := checkClusterExistence(); err != nil {
+		return err
+	}
+
+	if err := checkWorkloadSupport(gen.Meta().Name); err != nil {
+		return err
+	}
+
+	wrd, err := getClusterDetails()
+	if err != nil {
+		return err
+	}
+
+	wrd.workload = gen.Meta().Name
 
 	startPProfEndPoint(ctx)
 	initDB, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
@@ -526,52 +581,101 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				}
 			}
 
-			// wrd := workloadRunDetails{}
-
-			u, err := url.Parse(urls[0])
-
-			req := &url.URL{
-				Scheme: "http",
-				Host:   u.Hostname() + ":8080",
-				Path:   "_status/nodes",
-				// RawQuery: u.RequestURI(),
-			}
-
-			res, err := http.Get(req.String())
-
-			if err != nil {
-				fmt.Println("Sad %v", err)
-			}
-
-			// body, err := ioutil.ReadAll(res.Body)
-
-			// if err != nil {
-			// 	fmt.Println("Sad %v", err)
-			// }
-
-			nodeDetails := &serverpb.NodesResponse{}
-
-			err = jsonpb.Unmarshal(res.Body, nodeDetails)
-
-			if err != nil {
-				log.Fatal(context.TODO(), "unmarshaling error: ", err)
-			}
-
-			fmt.Println(nodeDetails)
-
-			// versionRow := initDB.QueryRow(`SELECT value FROM crdb_internal.node_build_info where field = 'Version'`)
-			// versionRow.Scan(wrd.dbVersion)
-
-			switch gen.Meta().Name {
-			case "tpcc":
-				tpccResults := results.(tpcc.TPCCResults)
-				fmt.Printf("\n\nSENDING YOUR STATS\n\n%v\n", tpccResults)
-			default:
-				fmt.Println("Workload not supported for")
-
+			if err := reportWorkloadResults(wrd, results); err != nil {
+				return err
 			}
 
 			return nil
 		}
 	}
+}
+
+func getAdminURLs() ([]string, error) {
+	cmd := exec.Command("roachprod", "adminurl", *cluster, "--ips")
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, errors.New("Cannot execute command: roachprod adminurl " + *cluster + " --ips")
+	}
+
+	rawAdminURLs := strings.Split(out.String(), "\n")
+	var adminURLs []string
+
+	for _, v := range rawAdminURLs {
+		if v != "" {
+			adminURLs = append(adminURLs, v)
+		}
+	}
+
+	return adminURLs, nil
+}
+
+func getClusterDetails() (*WorkloadRunDetails, error) {
+	client := &http.Client{}
+
+	wrd := WorkloadRunDetails{}
+
+	adminURLs, err := getAdminURLs()
+
+	if err != nil {
+		return nil, err
+	}
+
+	wrd.nodes = make([]NodeDetail, len(adminURLs))
+
+	nodeDiagnostics := &diagnosticspb.DiagnosticReport{}
+	for i, node := range adminURLs {
+
+		diagnosticReq, _ := http.NewRequest(
+			"GET",
+			node+"_status/diagnostics/local",
+			nil,
+		)
+
+		diagnosticReq.Header.Set("Accept", "application/x-protobuf")
+		diagnosticReq.Header.Set("Content-Type", "application/x-protobuf")
+
+		diagnosticRes, err := client.Do(diagnosticReq)
+		if err != nil {
+			return nil, err
+		}
+
+		body, err := ioutil.ReadAll(diagnosticRes.Body)
+		if err != nil {
+			return nil, err
+		}
+
+		if err = proto.Unmarshal(body, nodeDiagnostics); err != nil {
+			return nil, err
+		}
+
+		if i == 0 {
+			wrd.dbVersion = nodeDiagnostics.Node.Build.Tag
+		} else if nodeDiagnostics.Node.Build.Tag != wrd.dbVersion {
+			return nil, errors.New(fmt.Sprintf(
+				"Mixed version clusters not supported; have %v and %v\n",
+				wrd.dbVersion,
+				nodeDiagnostics.Node.Build.Tag,
+			))
+		}
+
+		wrd.nodes[i].provider = nodeDiagnostics.Node.Hardware.Provider
+		wrd.nodes[i].instanceClass = nodeDiagnostics.Node.Hardware.InstanceClass
+	}
+
+	return &wrd, nil
+}
+
+func reportWorkloadResults(wrd *WorkloadRunDetails, wr workload.WorkloadResults) error {
+
+	switch wrd.workload {
+	case "tpcc":
+		wrd.results = wr
+		fmt.Printf("\n\nSENDING YOUR STATS\n\n%v\n", wrd)
+	default:
+		return errors.New(fmt.Sprintf("%s not supported by perf-collector", wrd.workload))
+	}
+
+	return nil
 }

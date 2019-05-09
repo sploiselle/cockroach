@@ -18,7 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
-	"strconv"
+	// "strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -2739,18 +2739,18 @@ var ForeignKeyReferenceMatchValue = [...]tree.CompositeKeyMatchMethod{
 }
 
 // String implements the fmt.Stringer interface.
-func (x ForeignKeyReference_Match) String() string {
-	switch x {
-	case ForeignKeyReference_SIMPLE:
-		return "MATCH SIMPLE"
-	case ForeignKeyReference_FULL:
-		return "MATCH FULL"
-	case ForeignKeyReference_PARTIAL:
-		return "MATCH PARTIAL"
-	default:
-		return strconv.Itoa(int(x))
-	}
-}
+// func (x ForeignKeyReference_Match) String() string {
+// 	switch x {
+// 	case ForeignKeyReference_SIMPLE:
+// 		return "MATCH SIMPLE"
+// 	case ForeignKeyReference_FULL:
+// 		return "MATCH FULL"
+// 	case ForeignKeyReference_PARTIAL:
+// 		return "MATCH PARTIAL"
+// 	default:
+// 		return strconv.Itoa(int(x))
+// 	}
+// }
 
 // ForeignKeyReferenceActionValue allows the conversion between a
 // tree.ReferenceAction and a ForeignKeyReference_Action.
@@ -2763,20 +2763,22 @@ var ForeignKeyReferenceActionValue = [...]ForeignKeyReference_Action{
 }
 
 // String implements the fmt.Stringer interface.
-func (x ForeignKeyReference_Action) String() string {
-	switch x {
-	case ForeignKeyReference_RESTRICT:
-		return "RESTRICT"
-	case ForeignKeyReference_SET_DEFAULT:
-		return "SET DEFAULT"
-	case ForeignKeyReference_SET_NULL:
-		return "SET NULL"
-	case ForeignKeyReference_CASCADE:
-		return "CASCADE"
-	default:
-		return strconv.Itoa(int(x))
-	}
-}
+// func (x ForeignKeyReference_Action) String() string {
+// 	switch x {
+// 	case ForeignKeyReference_NO_ACTION:
+// 		return "NO_ACTION"
+// 	case ForeignKeyReference_RESTRICT:
+// 		return "RESTRICT"
+// 	case ForeignKeyReference_SET_DEFAULT:
+// 		return "SET DEFAULT"
+// 	case ForeignKeyReference_SET_NULL:
+// 		return "SET NULL"
+// 	case ForeignKeyReference_CASCADE:
+// 		return "CASCADE"
+// 	default:
+// 		return strconv.Itoa(int(x))
+// 	}
+// }
 
 var _ cat.Column = &ColumnDescriptor{}
 
