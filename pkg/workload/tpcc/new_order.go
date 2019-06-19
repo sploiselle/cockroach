@@ -183,12 +183,12 @@ func (n newOrder) run(
 				// RETURNING d_tax, d_next_o_id`,
 				d.wID, d.dID),
 			); err != nil {
-				fmt.Printf(`
-				UPDATE district
-				SET d_next_o_id = d_next_o_id + 1
-				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
-					// RETURNING d_tax, d_next_o_id`,
-					d.wID, d.dID)
+				// fmt.Printf(`
+				// UPDATE district
+				// SET d_next_o_id = d_next_o_id + 1
+				// WHERE d_w_id = %[1]d AND d_id = %[2]d`,
+				// 	// RETURNING d_tax, d_next_o_id`,
+				// 	d.wID, d.dID)
 				return err
 			}
 
@@ -201,11 +201,11 @@ func (n newOrder) run(
 				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
 				d.wID, d.dID),
 			).Scan(&d.dTax, &dNextOID); err != nil {
-				fmt.Printf(`
-				SELECT d_tax, d_next_o_id
-				FROM district
-				WHERE d_w_id = %[1]d AND d_id = %[2]d`,
-					d.wID, d.dID)
+				// fmt.Printf(`
+				// SELECT d_tax, d_next_o_id
+				// FROM district
+				// WHERE d_w_id = %[1]d AND d_id = %[2]d`,
+				// 	d.wID, d.dID)
 				return err
 			}
 
@@ -216,9 +216,9 @@ func (n newOrder) run(
 				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
 				wID),
 			).Scan(&d.wTax); err != nil {
-				fmt.Printf(`
-				SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
-					wID)
+				// fmt.Printf(`
+				// SELECT w_tax FROM warehouse WHERE w_id = %[1]d`,
+				// 	wID)
 				return err
 			}
 
@@ -229,11 +229,11 @@ func (n newOrder) run(
 				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
 				d.wID, d.dID, d.cID),
 			).Scan(&d.cDiscount, &d.cLast, &d.cCredit); err != nil {
-				fmt.Printf(`
-				SELECT c_discount, c_last, c_credit
-				FROM customer
-				WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
-					d.wID, d.dID, d.cID)
+				// fmt.Printf(`
+				// SELECT c_discount, c_last, c_credit
+				// FROM customer
+				// WHERE c_w_id = %[1]d AND c_d_id = %[2]d AND c_id = %[3]d`,
+				// 	d.wID, d.dID, d.cID)
 				return err
 			}
 
@@ -252,12 +252,12 @@ func (n newOrder) run(
 				strings.Join(itemIDs, ", ")),
 			)
 			if err != nil {
-				fmt.Printf(`
-				SELECT i_price, i_name, i_data
-				FROM item
-				WHERE i_id IN (%[1]s)
-				ORDER BY i_id`,
-					strings.Join(itemIDs, ", "))
+				// fmt.Printf(`
+				// SELECT i_price, i_name, i_data
+				// FROM item
+				// WHERE i_id IN (%[1]s)
+				// ORDER BY i_id`,
+				// 	strings.Join(itemIDs, ", "))
 				return err
 			}
 			iDatas := make([]string, d.oOlCnt)
@@ -324,13 +324,13 @@ func (n newOrder) run(
 				d.dID, sWID, strings.Join(stockIDstrs, " , ")),
 			)
 			if err != nil {
-				fmt.Printf(`
-				SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
-				FROM stock
-				WHERE s_w_id = %[2]d AND s_i_id IN (%[3]s)
-				ORDER BY s_i_id
-				`,
-					d.dID, sWID, strings.Join(stockIDstrs, " , "))
+				// fmt.Printf(`
+				// SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_%02[1]d
+				// FROM stock
+				// WHERE s_w_id = %[2]d AND s_i_id IN (%[3]s)
+				// ORDER BY s_i_id
+				// `,
+				// 	d.dID, sWID, strings.Join(stockIDstrs, " , "))
 				return err
 			}
 
@@ -401,11 +401,11 @@ func (n newOrder) run(
 				d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
 				d.oOlCnt, allLocal),
 			); err != nil {
-				fmt.Printf(`
-				INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
-				VALUES (%[1]d, %[2]d, %[3]d, %[4]d, '%[5]s', %[6]d, %[7]d)`,
-					d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
-					d.oOlCnt, allLocal)
+				// fmt.Printf(`
+				// INSERT INTO "order" (o_id, o_d_id, o_w_id, o_c_id, o_entry_d, o_ol_cnt, o_all_local)
+				// VALUES (%[1]d, %[2]d, %[3]d, %[4]d, '%[5]s', %[6]d, %[7]d)`,
+				// 	d.oID, d.dID, d.wID, d.cID, d.oEntryD.Format("2006-01-02 15:04:05"),
+				// 	d.oOlCnt, allLocal)
 				return err
 			}
 
@@ -413,10 +413,10 @@ func (n newOrder) run(
 				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
 				VALUES (%[1]d, %[2]d, %[3]d)`,
 				d.oID, d.dID, d.wID)); err != nil {
-				fmt.Printf(`
-				INSERT INTO new_order (no_o_id, no_d_id, no_w_id) 
-				VALUES (%[1]d, %[2]d, %[3]d)`,
-					d.oID, d.dID, d.wID)
+				// fmt.Printf(`
+				// INSERT INTO new_order (no_o_id, no_d_id, no_w_id)
+				// VALUES (%[1]d, %[2]d, %[3]d)`,
+				// 	d.oID, d.dID, d.wID)
 				return err
 			}
 
@@ -436,20 +436,20 @@ func (n newOrder) run(
 				sWID,
 				strings.Join(stockIDstrs, " , ")),
 			); err != nil {
-				fmt.Printf(`
-				UPDATE stock
-				SET
-					s_quantity = CASE %[1]s ELSE 0 END,
-					s_ytd = CASE %[2]s END,
-					s_order_cnt = CASE %[3]s END,
-					s_remote_cnt = CASE %[4]s END
-					WHERE s_w_id = %[5]d AND s_i_id IN (%[6]s)`,
-					strings.Join(sQuantityUpdateCases, " "),
-					strings.Join(sYtdUpdateCases, " "),
-					strings.Join(sOrderCntUpdateCases, " "),
-					strings.Join(sRemoteCntUpdateCases, " "),
-					sWID,
-					strings.Join(stockIDstrs, " , "))
+				// fmt.Printf(`
+				// UPDATE stock
+				// SET
+				// 	s_quantity = CASE %[1]s ELSE 0 END,
+				// 	s_ytd = CASE %[2]s END,
+				// 	s_order_cnt = CASE %[3]s END,
+				// 	s_remote_cnt = CASE %[4]s END
+				// 	WHERE s_w_id = %[5]d AND s_i_id IN (%[6]s)`,
+				// 	strings.Join(sQuantityUpdateCases, " "),
+				// 	strings.Join(sYtdUpdateCases, " "),
+				// 	strings.Join(sOrderCntUpdateCases, " "),
+				// 	strings.Join(sRemoteCntUpdateCases, " "),
+				// 	sWID,
+				// 	strings.Join(stockIDstrs, " , "))
 				return err
 			}
 
@@ -477,10 +477,10 @@ func (n newOrder) run(
 				VALUES %s`,
 				strings.Join(olValsStrings, ", ")),
 			); err != nil {
-				fmt.Printf(`
-				INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
-				VALUES %s`,
-					strings.Join(olValsStrings, ", "))
+				// fmt.Printf(`
+				// INSERT INTO order_line(ol_o_id, ol_d_id, ol_w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info)
+				// VALUES %s`,
+				// 	strings.Join(olValsStrings, ", "))
 				return err
 			}
 
