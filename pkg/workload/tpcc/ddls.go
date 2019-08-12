@@ -106,6 +106,20 @@ const (
 		primary key  (o_w_id, o_d_id, o_id DESC),
 		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC)
 	)`
+
+	tpccOrderSchemaBasePG = `(
+		o_id         integer      not null,
+		o_d_id       integer      not null,
+		o_w_id       integer      not null,
+		o_c_id       integer,
+		o_entry_d    timestamp,
+		o_carrier_id integer,
+		o_ol_cnt     integer,
+		o_all_local  integer,
+		primary key  (o_w_id, o_d_id, o_id),
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id)
+	)`
+
 	tpccOrderSchemaInterleaveSuffix = `
 		interleave in parent district (o_w_id, o_d_id)`
 
@@ -170,6 +184,20 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
+
+	tpccOrderLineSchemaBasePG = `(
+			ol_o_id         integer   not null,
+			ol_d_id         integer   not null,
+			ol_w_id         integer   not null,
+			ol_number       integer   not null,
+			ol_i_id         integer   not null,
+			ol_supply_w_id  integer,
+			ol_delivery_d   timestamp,
+			ol_quantity     integer,
+			ol_amount       decimal(6,2),
+			ol_dist_info    char(24),
+			primary key (ol_w_id, ol_d_id, ol_o_id, ol_number)`
+
 	tpccOrderLineSchemaFkSuffix = `
 		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 	tpccOrderLineSchemaInterleaveSuffix = `

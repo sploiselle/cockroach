@@ -118,7 +118,7 @@ var tpccMeta = workload.Meta{
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
-			`pg`:                 {RuntimeOnly: true},
+			`pgtpcc`:             {RuntimeOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
@@ -427,6 +427,15 @@ func (w *tpcc) Tables() []workload.Table {
 			FillBatch:  w.tpccOrderInitialRowBatch,
 		},
 	}
+
+	if w.usePostgres {
+		order.Schema = maybeAddInterleaveSuffix(
+			w.interleaved,
+			tpccOrderSchemaBasePG,
+			tpccOrderSchemaInterleaveSuffix,
+		)
+	}
+
 	newOrder := workload.Table{
 		Name:   `new_order`,
 		Schema: tpccNewOrderSchema,
@@ -485,6 +494,19 @@ func (w *tpcc) Tables() []workload.Table {
 		},
 		Stats: w.tpccOrderLineStats(),
 	}
+
+	if w.usePostgres {
+		orderLine.Schema = maybeAddInterleaveSuffix(
+			w.interleaved,
+			maybeAddFkSuffix(
+				w.fks,
+				tpccOrderLineSchemaBasePG,
+				tpccOrderLineSchemaFkSuffix,
+			),
+			tpccOrderLineSchemaInterleaveSuffix,
+		)
+	}
+
 	return []workload.Table{
 		warehouse, district, customer, history, order, newOrder, item, stock, orderLine,
 	}
