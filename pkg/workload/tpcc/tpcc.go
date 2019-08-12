@@ -149,7 +149,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 
-		g.flags.BoolVar(&g.usePostgres, `pg`, false, `Only use Postgres compatible features`)
+		g.flags.BoolVar(&g.usePostgres, `pgtpcc`, false, `Only use Postgres-compatible features for TPCC`)
 
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
