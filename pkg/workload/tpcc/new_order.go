@@ -410,6 +410,7 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 					strings.Join(sRemoteCntUpdateCases, " "),
 					strings.Join(stockIDs, ", "),
 				)
+				fmt.Println(updateStockStmt)
 			}
 			if _, err := tx.ExecEx(
 				ctx,

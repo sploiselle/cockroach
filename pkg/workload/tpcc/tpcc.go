@@ -385,7 +385,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `customer`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccCustomerSchemaBase,
+			addIndexes(
+				w,
+				tpccCustomerSchemaBase,
+				[]indexDDL{tpccCustomerIndex},
+			),
 			tpccCustomerSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
@@ -394,6 +398,7 @@ func (w *tpcc) Tables() []workload.Table {
 		},
 		Stats: w.tpccCustomerStats(),
 	}
+
 	history := workload.Table{
 		Name: `history`,
 		Schema: maybeAddFkSuffix(
@@ -417,7 +422,11 @@ func (w *tpcc) Tables() []workload.Table {
 		Name: `order`,
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
-			tpccOrderSchemaBase,
+			addIndexes(
+				w,
+				tpccOrderSchemaBase,
+				[]indexDDL{tpccOrderIndex},
+			),
 			tpccOrderSchemaInterleaveSuffix,
 		),
 		InitialRows: workload.BatchedTuples{
@@ -427,10 +436,10 @@ func (w *tpcc) Tables() []workload.Table {
 	}
 
 	if w.usePostgres {
-		order.Schema = maybeAddInterleaveSuffix(
-			w.interleaved,
+		order.Schema = addIndexes(
+			w,
 			tpccOrderSchemaBasePG,
-			tpccOrderSchemaInterleaveSuffix,
+			[]indexDDL{tpccOrderIndexPG},
 		)
 	}
 
@@ -494,14 +503,10 @@ func (w *tpcc) Tables() []workload.Table {
 	}
 
 	if w.usePostgres {
-		orderLine.Schema = maybeAddInterleaveSuffix(
-			w.interleaved,
-			maybeAddFkSuffix(
-				w,
-				tpccOrderLineSchemaBasePG,
-				tpccOrderLineSchemaFkSuffix,
-			),
-			tpccOrderLineSchemaInterleaveSuffix,
+		orderLine.Schema = maybeAddFkSuffix(
+			w,
+			tpccOrderLineSchemaBasePG,
+			tpccOrderLineSchemaFkSuffix,
 		)
 	}
 
@@ -619,6 +624,7 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	for _, tx := range allTxs {
 		reg.GetHandle().Get(tx.name)
 	}
+	fmt.Println("Generated query load...")
 	return ql, nil
 }
 

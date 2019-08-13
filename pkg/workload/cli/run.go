@@ -266,20 +266,24 @@ func runInitImpl(
 		}
 	}
 
-	if _, err := initDB.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+dbName); err != nil {
-		return err
-	}
+	if *usePostgres {
+		if _, err := initDB.ExecContext(ctx, `CREATE SCHEMA IF NOT EXISTS `+dbName); err != nil {
+			return err
+		}
+		// Postgres compatibility: Postgres doesn't support CREATE DATABASE IF NOT EXISTS
+		// so this workaround checks if a database with the same name exists, and only
+		// creates it if it doesn't.
 
-	// Postgres compatibility: Postgres doesn't support CREATE DATABASE IF NOT EXISTS
-	// so this workaround checks if a database with the same name exists, and only
-	// creates it if it doesn't. There's little concern of a race condition in this context,
-	// so it's an acceptable workaround.
+		var tableExists int
+		initDB.QueryRow(fmt.Sprintf(`SELECT 1 FROM pg_database WHERE datname = '%s'`, dbName)).Scan(&tableExists)
 
-	var tableExists int
-	initDB.QueryRow(fmt.Sprintf(`SELECT 1 FROM pg_database WHERE datname = '%s'`, dbName)).Scan(&tableExists)
-
-	if tableExists == 0 {
-		if _, err := initDB.ExecContext(ctx, `CREATE DATABASE `+dbName); err != nil {
+		if tableExists == 0 {
+			if _, err := initDB.ExecContext(ctx, `CREATE DATABASE `+dbName); err != nil {
+				return err
+			}
+		}
+	} else {
+		if _, err := initDB.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS `+dbName); err != nil {
 			return err
 		}
 	}

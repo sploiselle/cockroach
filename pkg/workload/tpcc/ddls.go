@@ -38,10 +38,10 @@ func (i indexDDL) createIndexStatement() string {
 	stmt := `CREATE`
 
 	if i.typeOfIndex == uniqueIndex {
-		stmt += ` UNIQUE `
+		stmt += ` UNIQUE`
 	}
 
-	stmt += fmt.Sprintf(` INDEX %s ON %s (%s);`, i.name, i.table, strings.Join(i.columns, ","))
+	stmt += fmt.Sprintf(" INDEX IF NOT EXISTS %s ON %s (%s);\n", i.name, i.table, strings.Join(i.columns, ","))
 
 	return stmt
 }
@@ -109,8 +109,7 @@ const (
 		c_payment_cnt  integer,
 		c_delivery_cnt integer,
 		c_data         varchar(500),
-		primary key (c_w_id, c_d_id, c_id)
-	)`
+		primary key (c_w_id, c_d_id, c_id)`
 	tpccCustomerSchemaInterleaveSuffix = `interleave in parent district (c_w_id, c_d_id)`
 
 	// HISTORY table.
@@ -136,9 +135,7 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key  (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC)
-	)`
+		primary key  (o_w_id, o_d_id, o_id DESC)`
 
 	tpccOrderSchemaBasePG = `(
 		o_id         integer      not null,
@@ -149,8 +146,7 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key  (o_w_id, o_d_id, o_id)
-	)`
+		primary key  (o_w_id, o_d_id, o_id)`
 
 	tpccOrderSchemaInterleaveSuffix = `
 		interleave in parent district (o_w_id, o_d_id)`
@@ -233,6 +229,13 @@ const (
 		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
 
+var tpccCustomerIndex = indexDDL{
+	name:        "customer_idx",
+	table:       "customer",
+	columns:     []string{"c_w_id", "c_d_id", "c_last", "c_first"},
+	typeOfIndex: coveringIndex,
+}
+
 var tpccHistoryCustomerFKIndex = indexDDL{
 	name:        "history_customer_fk_idx",
 	table:       "history",
@@ -247,8 +250,16 @@ var tpccHistoryDistrictFKIndex = indexDDL{
 	typeOfIndex: coveringIndex,
 }
 
-var tpccOrderSchemaBasePGIndex1 = indexDDL{
+var tpccOrderIndex = indexDDL{
+	name:        "order_idx",
 	table:       "order",
+	columns:     []string{"o_w_id", "o_d_id", "o_c_id", "o_id DESC"},
+	typeOfIndex: uniqueIndex,
+}
+
+var tpccOrderIndexPG = indexDDL{
+	name:        "order_idx",
+	table:       `"order"`,
 	columns:     []string{"o_w_id", "o_d_id", "o_c_id", "o_id"},
 	typeOfIndex: uniqueIndex,
 }

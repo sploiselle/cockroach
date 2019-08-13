@@ -248,6 +248,7 @@ func (p *partitioner) randActive(rng *rand.Rand) int {
 // flag is passed into tpcc, it will set the constraints/preferences based on
 // the geographic zones provided.
 func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partIdx int) error {
+	fmt.Println("configureZone...")
 	var kv string
 	if len(cfg.zones) > 0 {
 		kv = fmt.Sprintf("zone=%s", cfg.zones[partIdx])
@@ -281,6 +282,7 @@ func configureZone(db *gosql.DB, cfg zoneConfig, table, partition string, partId
 func partitionObject(
 	db *gosql.DB, cfg zoneConfig, p *partitioner, obj, name, col, table string, idx int,
 ) error {
+	fmt.Println("partitionObject...")
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "ALTER %s %s PARTITION BY RANGE (%s) (\n", obj, name, col)
 	for i := 0; i < p.parts; i++ {
