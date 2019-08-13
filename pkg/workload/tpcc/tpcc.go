@@ -397,7 +397,7 @@ func (w *tpcc) Tables() []workload.Table {
 	history := workload.Table{
 		Name: `history`,
 		Schema: maybeAddFkSuffix(
-			w.fks,
+			w,
 			tpccHistorySchemaBase,
 			tpccHistorySchemaFkSuffix,
 		),
@@ -412,6 +412,7 @@ func (w *tpcc) Tables() []workload.Table {
 			},
 		)),
 	}
+
 	order := workload.Table{
 		Name: `order`,
 		Schema: maybeAddInterleaveSuffix(
@@ -462,7 +463,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w,
 				tpccStockSchemaBase,
 				tpccStockSchemaFkSuffix,
 			),
@@ -479,7 +480,7 @@ func (w *tpcc) Tables() []workload.Table {
 		Schema: maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w,
 				tpccOrderLineSchemaBase,
 				tpccOrderLineSchemaFkSuffix,
 			),
@@ -496,7 +497,7 @@ func (w *tpcc) Tables() []workload.Table {
 		orderLine.Schema = maybeAddInterleaveSuffix(
 			w.interleaved,
 			maybeAddFkSuffix(
-				w.fks,
+				w,
 				tpccOrderLineSchemaBasePG,
 				tpccOrderLineSchemaFkSuffix,
 			),

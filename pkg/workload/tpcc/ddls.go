@@ -41,7 +41,7 @@ func (i indexDDL) createIndexStatement() string {
 		stmt += ` UNIQUE `
 	}
 
-	stmt += fmt.Sprintf(` INDEX %s ON %s (%s);\n`, i.name, i.table, strings.Join(i.columns, ","))
+	stmt += fmt.Sprintf(` INDEX %s ON %s (%s);`, i.name, i.table, strings.Join(i.columns, ","))
 
 	return stmt
 }
@@ -51,7 +51,7 @@ func (i indexDDL) inlineIndex() string {
 	if i.typeOfIndex == uniqueIndex {
 		stmt += `UNIQUE `
 	}
-	return fmt.Sprintf(`INDEX %s (%s)\n`, i.name, strings.Join(i.columns, ","))
+	return fmt.Sprintf("INDEX %s (%s)", i.name, strings.Join(i.columns, ","))
 }
 
 const (
@@ -277,9 +277,10 @@ var tpccOrderLineIdx = indexDDL{
 var tpccOrderLineSchemaFkSuffix = []indexDDL{tpccOrderLineIdx}
 
 func addIndexes(w *tpcc, base string, indexes []indexDDL) string {
+	const endSchema = "\n\t);\n"
 	if w.usePostgres {
 
-		base += `;\n`
+		base += endSchema
 
 		for _, index := range indexes {
 			base += index.createIndexStatement()
@@ -288,8 +289,9 @@ func addIndexes(w *tpcc, base string, indexes []indexDDL) string {
 	} else {
 
 		for _, index := range indexes {
-			base += index.inlineIndex()
+			base += ",\n\t" + index.inlineIndex()
 		}
+		base += endSchema
 	}
 
 	return base
@@ -300,7 +302,7 @@ func maybeAddFkSuffix(w *tpcc, base string, indexes []indexDDL) string {
 	if !w.fks {
 		return base + endSchema
 	}
-	return addIndexes(w, base, indexes) + endSchema
+	return addIndexes(w, base, indexes)
 }
 
 func maybeAddInterleaveSuffix(interleave bool, base, suffix string) string {
