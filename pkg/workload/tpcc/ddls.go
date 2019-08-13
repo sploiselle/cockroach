@@ -13,10 +13,46 @@ package tpcc
 import (
 	gosql "database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+type indexType int
+
+const (
+	_ indexType = iota
+	coveringIndex
+	uniqueIndex
+)
+
+type indexDDL struct {
+	name        string
+	table       string
+	columns     []string
+	typeOfIndex indexType
+}
+
+func (i indexDDL) createIndexStatement() string {
+	stmt := `CREATE`
+
+	if i.typeOfIndex == uniqueIndex {
+		stmt += ` UNIQUE `
+	}
+
+	stmt += fmt.Sprintf(` INDEX %s ON %s (%s);\n`, i.name, i.table, strings.Join(i.columns, ","))
+
+	return stmt
+}
+
+func (i indexDDL) inlineIndex() string {
+	var stmt string
+	if i.typeOfIndex == uniqueIndex {
+		stmt += `UNIQUE `
+	}
+	return fmt.Sprintf(`INDEX %s (%s)\n`, i.name, strings.Join(i.columns, ","))
+}
 
 const (
 	// WAREHOUSE table.
@@ -89,9 +125,6 @@ const (
 		h_amount decimal(6,2),
 		h_data   varchar(24),
 		primary key (h_w_id, rowid)`
-	tpccHistorySchemaFkSuffix = `
-		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
-		index history_district_fk_idx (h_w_id, h_d_id)`
 
 	// ORDER table.
 	tpccOrderSchemaBase = `(
@@ -116,8 +149,7 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key  (o_w_id, o_d_id, o_id),
-		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id)
+		primary key  (o_w_id, o_d_id, o_id)
 	)`
 
 	tpccOrderSchemaInterleaveSuffix = `
@@ -166,8 +198,7 @@ const (
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id)`
-	tpccStockSchemaFkSuffix = `
-		index stock_item_fk_idx (s_i_id)`
+
 	tpccStockSchemaInterleaveSuffix = `
 		interleave in parent warehouse (s_w_id)`
 
@@ -186,30 +217,90 @@ const (
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
 
 	tpccOrderLineSchemaBasePG = `(
-			ol_o_id         integer   not null,
-			ol_d_id         integer   not null,
-			ol_w_id         integer   not null,
-			ol_number       integer   not null,
-			ol_i_id         integer   not null,
-			ol_supply_w_id  integer,
-			ol_delivery_d   timestamp,
-			ol_quantity     integer,
-			ol_amount       decimal(6,2),
-			ol_dist_info    char(24),
-			primary key (ol_w_id, ol_d_id, ol_o_id, ol_number)`
+		ol_o_id         integer   not null,
+		ol_d_id         integer   not null,
+		ol_w_id         integer   not null,
+		ol_number       integer   not null,
+		ol_i_id         integer   not null,
+		ol_supply_w_id  integer,
+		ol_delivery_d   timestamp,
+		ol_quantity     integer,
+		ol_amount       decimal(6,2),
+		ol_dist_info    char(24),
+		primary key (ol_w_id, ol_d_id, ol_o_id, ol_number)`
 
-	tpccOrderLineSchemaFkSuffix = `
-		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 	tpccOrderLineSchemaInterleaveSuffix = `
 		interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
 
-func maybeAddFkSuffix(fks bool, base, suffix string) string {
+var tpccHistoryCustomerFKIndex = indexDDL{
+	name:        "history_customer_fk_idx",
+	table:       "history",
+	columns:     []string{"h_w_id", "h_d_id"},
+	typeOfIndex: coveringIndex,
+}
+
+var tpccHistoryDistrictFKIndex = indexDDL{
+	name:        "history_district_fk_idx",
+	table:       "history",
+	columns:     []string{"h_c_w_id", "h_c_d_id", "h_c_id"},
+	typeOfIndex: coveringIndex,
+}
+
+var tpccOrderSchemaBasePGIndex1 = indexDDL{
+	table:       "order",
+	columns:     []string{"o_w_id", "o_d_id", "o_c_id", "o_id"},
+	typeOfIndex: uniqueIndex,
+}
+
+var tpccHistorySchemaFkSuffix = []indexDDL{
+	tpccHistoryCustomerFKIndex,
+	tpccHistoryDistrictFKIndex,
+}
+
+var tpccStockSchemaIndex = indexDDL{
+	name:        "stock_item_fk_idx",
+	table:       "stock",
+	columns:     []string{"s_i_id"},
+	typeOfIndex: coveringIndex,
+}
+
+var tpccStockSchemaFkSuffix = []indexDDL{tpccStockSchemaIndex}
+
+var tpccOrderLineIdx = indexDDL{
+	name:        "order_line_stock_fk_idx",
+	table:       "order_line",
+	columns:     []string{"ol_supply_w_id", "ol_i_id"},
+	typeOfIndex: coveringIndex,
+}
+
+var tpccOrderLineSchemaFkSuffix = []indexDDL{tpccOrderLineIdx}
+
+func addIndexes(w *tpcc, base string, indexes []indexDDL) string {
+	if w.usePostgres {
+
+		base += `;\n`
+
+		for _, index := range indexes {
+			base += index.createIndexStatement()
+		}
+
+	} else {
+
+		for _, index := range indexes {
+			base += index.inlineIndex()
+		}
+	}
+
+	return base
+}
+
+func maybeAddFkSuffix(w *tpcc, base string, indexes []indexDDL) string {
 	const endSchema = "\n\t)"
-	if !fks {
+	if !w.fks {
 		return base + endSchema
 	}
-	return base + "," + suffix + endSchema
+	return addIndexes(w, base, indexes) + endSchema
 }
 
 func maybeAddInterleaveSuffix(interleave bool, base, suffix string) string {

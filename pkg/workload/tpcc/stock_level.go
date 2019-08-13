@@ -79,7 +79,7 @@ func createStockLevel(
 				AND ol_d_id = $2
 				AND ol_o_id BETWEEN $3 - 20 AND $3 - 1
 				AND s_quantity < $4
-		) s`,
+		)`,
 	)
 
 	if err := s.sr.Init(ctx, "stock-level", mcp, config.connFlags); err != nil {

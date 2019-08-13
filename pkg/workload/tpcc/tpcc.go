@@ -51,7 +51,6 @@ type tpcc struct {
 	mix        string
 	doWaits    bool
 	workers    int
-	conns      int
 	fks        bool
 	dbOverride string
 
@@ -116,7 +115,6 @@ var tpccMeta = workload.Meta{
 			`split`:              {RuntimeOnly: true},
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
-			`conns`:              {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 			`pgtpcc`:             {RuntimeOnly: true},
 		}
@@ -170,7 +168,6 @@ func (w *tpcc) Flags() workload.Flags { return w.flags }
 func (w *tpcc) Hooks() workload.Hooks {
 	return workload.Hooks{
 		Validate: func() error {
-
 			if w.warehouses < 1 {
 				return errors.Errorf(`--warehouses must be positive`)
 			}
@@ -244,16 +241,16 @@ func (w *tpcc) Hooks() workload.Hooks {
 				// TODO(lucy-zhang): expose an internal knob to validate fk
 				// relations without performing full validation. See #38833.
 				fkStmts := []string{
-					`alter table district add foreign key (d_w_id) references warehouse (w_id) not valid`,
-					`alter table customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
-					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
-					`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
-					`alter table stock add foreign key (s_i_id) references item (i_id) not valid`,
-					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
-					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
+					`alter table tpcc.district add foreign key (d_w_id) references warehouse (w_id) not valid`,
+					`alter table tpcc.customer add foreign key (c_w_id, c_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table tpcc.history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table tpcc.history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id) not valid`,
+					`alter table tpcc."order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id) not valid`,
+					`alter table tpcc.new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table tpcc.stock add foreign key (s_w_id) references warehouse (w_id) not valid`,
+					`alter table tpcc.stock add foreign key (s_i_id) references item (i_id) not valid`,
+					`alter table tpcc.order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id) not valid`,
+					`alter table tpcc.order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id) not valid`,
 				}
 
 				for _, fkStmt := range fkStmts {

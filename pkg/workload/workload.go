@@ -140,9 +140,12 @@ type Table struct {
 	// Schema is the SQL formatted schema for this table, with the `CREATE TABLE
 	// <name>` prefix omitted.
 	Schema string
-	// Indexes is a slice of `CREATE INDEX` statements with the `CREATE INDEX
-	// ON <name>` prefix omitted
-	Indexes []string
+	// CoveringIndexes is a slice of `CREATE INDEX` statements with the `CREATE INDEX
+	// ON <name>` prefix omitted.
+	CoveringIndexes []string
+	// UniqueIndexes is a slice of `CREATE UNIQUE INDEX` statements with the
+	// `CREATE UNIQUE INDEX ON <name>` prefix omitted.
+	UniqueIndexes []string
 	// InitialRows is the initial rows that will be present in the table after
 	// setup is completed. Note that the default value of NumBatches (zero) is
 	// special - such a Table will be skipped during `init`; non-zero NumBatches
