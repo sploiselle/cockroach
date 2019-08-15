@@ -378,8 +378,8 @@ func (n *newOrder) run(ctx context.Context, wID int) (interface{}, error) {
 			// Update the stock table for each item.
 			var updateStockStmt string
 
-			// Postgres does not support crdb_internal.force_error, so must
-			// execute a different statement.
+			// Postgres compatibility: Postgres does not support crdb_internal.force_error,
+			// so we must execute a different statement.
 			if n.config.usePostgres {
 				updateStockStmt = fmt.Sprintf(`
 				UPDATE stock

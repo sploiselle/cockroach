@@ -13,47 +13,14 @@ package tpcc
 import (
 	gosql "database/sql"
 	"fmt"
-	"strings"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
-type indexType int
-
-const (
-	_ indexType = iota
-	coveringIndex
-	uniqueIndex
-)
-
-type indexDDL struct {
-	name        string
-	table       string
-	columns     []string
-	typeOfIndex indexType
-}
-
-func (i indexDDL) createIndexStatement() string {
-	stmt := `CREATE`
-
-	if i.typeOfIndex == uniqueIndex {
-		stmt += ` UNIQUE`
-	}
-
-	stmt += fmt.Sprintf(" INDEX IF NOT EXISTS %s ON %s (%s);\n", i.name, i.table, strings.Join(i.columns, ","))
-
-	return stmt
-}
-
-func (i indexDDL) inlineIndex() string {
-	var stmt string
-	if i.typeOfIndex == uniqueIndex {
-		stmt += `UNIQUE `
-	}
-	return fmt.Sprintf("INDEX %s (%s)", i.name, strings.Join(i.columns, ","))
-}
-
+// The following consts describe the table schemas for TPC-C;
+// for compatibility with Postgres, indexes must be defined
+// as structs are defined beneath the tables.
 const (
 	// WAREHOUSE table.
 	tpccWarehouseSchema = `(

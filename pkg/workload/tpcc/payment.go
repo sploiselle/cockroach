@@ -130,9 +130,9 @@ func createPayment(ctx context.Context, config *tpcc, mcp *workload.MultiConnPoo
 	// the first 200 characters of it, which is supposed to get displayed by
 	// the terminal. See 2.5.3.3 and 2.5.2.2.
 	if config.usePostgres {
-		// Postgresql doesn't support type annotations. However, $5 and $6 (d.cDID, d.cID)
-		// must still be cast to int because pg doesn't support casting their underlying
-		// type to text.
+		// Postgres compatibility: Postgresql doesn't support type annotations. However,
+		// $5 and $6 (d.cDID, d.cID) must still be cast to int because pg doesn't support
+		// casting their underlying type to text.
 		p.updateWithPayment = p.sr.Define(`
 		UPDATE customer
 		SET (c_balance, c_ytd_payment, c_payment_cnt, c_data) =

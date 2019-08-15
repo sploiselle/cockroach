@@ -101,7 +101,8 @@ func createOrderStatus(
 
 	// Select the customer's order.
 	if config.usePostgres {
-		// Postgres' default it INT4, so must be cast to INT8.
+		// Postgres compatibility: Postgres' default it INT4, so must be
+		// cast to INT8.
 		o.selectOrder = o.sr.Define(`
 			SELECT o_id, o_entry_d, o_carrier_id::INT8
 			FROM "order"

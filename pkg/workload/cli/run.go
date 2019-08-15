@@ -282,7 +282,7 @@ func runInitImpl(
 			}
 		}
 
-		// pgcrypto is required for Postgres to support gen_random_uuid()
+		// Postgres compatibility: pgcrypto is required for Postgres to support gen_random_uuid().
 		if _, err := initDB.ExecContext(ctx, `CREATE EXTENSION IF NOT EXISTS pgcrypto`); err != nil {
 			return err
 		}
