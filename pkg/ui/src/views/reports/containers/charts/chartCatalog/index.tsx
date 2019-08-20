@@ -11,11 +11,9 @@
 import _ from "lodash";
 import React from "react";
 
-// import * as catalog from "src/views/reports/containers/charts/catalog";
 import { cockroach } from "src/js/protos";
 
 import "./chartCatalog.styl";
-// import { ChartSection } from "../catalog";
 
 function RenderListCell(props: {
   links: cockroach.ts.catalog.IndividualChart[];
