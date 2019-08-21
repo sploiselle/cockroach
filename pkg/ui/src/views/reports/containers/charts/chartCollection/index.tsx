@@ -25,7 +25,7 @@ import { PageConfig, PageConfigItem } from "src/views/shared/components/pageconf
 
 import { SortedTable } from "src/views/shared/components/sortedtable";
 
-import { cockroach } from "src/js/protos";
+import { cockroach, io } from "src/js/protos";
 
 import "./chartCollection.styl";
 
@@ -154,6 +154,7 @@ class ChartCollection extends React.Component<ChartCollectionProps & WithRouterP
         let urlForCustomChart:string = '/#/debug/chart?charts=' + encodeURIComponent(JSON.stringify(allCharts));
 
         console.log(urlForCustomChart)
+        // this.props.history.push(urlForCustomChart)
 
       return (
         <section className="section">
@@ -315,25 +316,41 @@ function RenderChartDescriptionTable(props: {chart: cockroach.ts.catalog.Individ
   )
 }
 
+// getMetricVal creates a metricVal object using a chart and a metric name, which already 
+// has the appropriate suffix i.e. cr.node or cr.store. This is broken out into its own
+// function for simplicities sake in generating the correct metric name for histogram
+// metricsm, i.e. requires appending a range of sufffixes.
+function getMetricVal(chart: cockroach.ts.catalog.IndividualChart, metricName: string) {
+  let metricVal = {}
+  metricVal["downsampler"] = chart.downsampler;
+  metricVal["aggregator"] = chart.aggregator;
+  metricVal["derivative"] = chart.derivative;
+  metricVal["perNode"] = false;
+  metricVal["source"] = ""
+  metricVal["metric"] = metricName
+  return metricVal
+}
+
 function getCustomChartParams(chart: cockroach.ts.catalog.IndividualChart, storeMetrics: string[]) {
   let customChartURLParams = {
     ["metrics"]: [],
     ["axisUnits"]: axisUnitsMap[chart.units]
   };
 
+  const quantileSuffixes = ["-max", "-p99.999", "-p99.99","-p99.9", "-p99","-p90","-p75","-p50"]
+
   chart.metrics.forEach(metric => {
 
     let metricName:string = _.includes(storeMetrics, metric.name) ? 'cr.store.' + metric.name : 'cr.node.' + metric.name;
 
-    let metricVal = {}
-    metricVal["downsampler"] = chart.downsampler;
-    metricVal["aggregator"] = chart.aggregator;
-    metricVal["derivative"] = chart.derivative;
-    metricVal["perNode"] = false;
-    metricVal["source"] = ""
-    metricVal["metric"] = metricName
-
-    customChartURLParams["metrics"] = customChartURLParams["metrics"].concat(metricVal)
+    if(metric.metricType == io.prometheus.client.MetricType.HISTOGRAM) {
+      // Append each quantile suffix to the metric name
+      quantileSuffixes.forEach(suffix => {
+        customChartURLParams["metrics"] = customChartURLParams["metrics"].concat(getMetricVal(chart, metricName + suffix))
+      })
+    } else {
+      customChartURLParams["metrics"] = customChartURLParams["metrics"].concat(getMetricVal(chart, metricName))
+    }
 
   });
 
