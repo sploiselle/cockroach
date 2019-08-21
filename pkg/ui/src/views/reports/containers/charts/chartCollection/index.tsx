@@ -126,6 +126,7 @@ class ChartCollection extends React.Component<ChartCollectionProps & WithRouterP
 
   render(){
 
+
     const { error, isLoaded } = this.state;
     if (error) {
       return <div>Error: {error.message}</div>;
@@ -142,6 +143,17 @@ class ChartCollection extends React.Component<ChartCollectionProps & WithRouterP
       nodesSummary.nodeStatuses 
         ? storeMetrics = _.keys(nodesSummary.nodeStatuses[0].store_statuses[0].metrics) 
         : this.refresh();
+
+
+        // Create URL
+        let allCharts = []
+        this.state.collection.chartsArr.forEach(chart => {
+          allCharts = allCharts.concat(getCustomChartParams(chart, storeMetrics))
+        })
+
+        let urlForCustomChart:string = '/#/debug/chart?charts=' + encodeURIComponent(JSON.stringify(allCharts));
+
+        console.log(urlForCustomChart)
 
       return (
         <section className="section">
@@ -301,6 +313,31 @@ function RenderChartDescriptionTable(props: {chart: cockroach.ts.catalog.Individ
       ]} />
     </div>
   )
+}
+
+function getCustomChartParams(chart: cockroach.ts.catalog.IndividualChart, storeMetrics: string[]) {
+  let customChartURLParams = {
+    ["metrics"]: [],
+    ["axisUnits"]: axisUnitsMap[chart.units]
+  };
+
+  chart.metrics.forEach(metric => {
+
+    let metricName:string = _.includes(storeMetrics, metric.name) ? 'cr.store.' + metric.name : 'cr.node.' + metric.name;
+
+    let metricVal = {}
+    metricVal["downsampler"] = chart.downsampler;
+    metricVal["aggregator"] = chart.aggregator;
+    metricVal["derivative"] = chart.derivative;
+    metricVal["perNode"] = false;
+    metricVal["source"] = ""
+    metricVal["metric"] = metricName
+
+    customChartURLParams["metrics"] = customChartURLParams["metrics"].concat(metricVal)
+
+  });
+
+  return customChartURLParams;
 }
 
 function RenderLinkToCustomChart(props: {chart: cockroach.ts.catalog.IndividualChart, storeMetrics: string[]}){
