@@ -86,10 +86,11 @@ func createOrderStatus(
 	)
 
 	// TODO(radu): this is only useful for the heuristic planner.
-	indexStr := "@customer_idx"
-	if o.config.usePostgres {
-		indexStr = ""
-	}
+	// indexStr := "@customer_idx"
+	// if o.config.usePostgres {
+	// 	indexStr = ""
+	// }
+	indexStr := ""
 
 	// Pick the middle row, rounded up, from the selection by last name.
 	o.selectByLastName = o.sr.Define(fmt.Sprintf(`
