@@ -359,10 +359,11 @@ func partitionStock(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
 }
 
 func partitionCustomer(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
-	if err := partitionTable(db, cfg, wPart, "customer", "c_w_id", 0); err != nil {
-		return err
-	}
-	return partitionIndex(db, cfg, wPart, "customer", "customer_idx", "c_w_id", 1)
+	// if err := partitionTable(db, cfg, wPart, "customer", "c_w_id", 0); err != nil {
+	// 	return err
+	// }
+	// return partitionIndex(db, cfg, wPart, "customer", "customer_idx", "c_w_id", 1)
+	return partitionTable(db, cfg, wPart, "customer", "c_w_id", 0)
 }
 
 func partitionHistory(db *gosql.DB, cfg zoneConfig, wPart *partitioner) error {
